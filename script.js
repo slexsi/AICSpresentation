@@ -121,12 +121,21 @@ playBtn.addEventListener("click", async () => {
       const seedSeq = { notes: [] };
       const rnnSeq = await drumRNN.continueSequence(seedSeq, 64, 1.0);
 
+      // Offset RNN notes to audioContext.currentTime
       rnnSeq.notes.forEach(n => {
         let lane;
         if (n.pitch === 36) lane = 0;
         else if (n.pitch === 38) lane = 1;
         else lane = 2;
-        notes.push({ lane, y: 0, hit: false, type: "rnn", time: n.startTime, spawned: false });
+
+        notes.push({
+          lane,
+          y: 0,
+          hit: false,
+          type: "rnn",
+          time: audioContext.currentTime + n.startTime,
+          spawned: false
+        });
       });
     }
 
@@ -177,6 +186,7 @@ function gameLoop() {
     ctx.fillStyle = n.type === "rms" ? "red" : "blue";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
+    // hit detection
     const keyPressed = keys[lanes[n.lane]];
     if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
       score += 100;
