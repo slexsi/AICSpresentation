@@ -29,7 +29,7 @@ const songUpload = document.getElementById("songUpload");
 const audioElement = new Audio(); // no default source
 audioElement.crossOrigin = "anonymous";
 
-let audioContext, sourceNode, analyzer;
+let audioContext, sourceNode, analyzer, startTime;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
 
@@ -46,9 +46,11 @@ let drumRNN;
 const MODEL_URL = "https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/drum_kit_rnn";
 
 async function loadRNN() {
-  drumRNN = new mm.MusicRNN(MODEL_URL);
-  await drumRNN.initialize();
-  console.log("Drum RNN Loaded!");
+  if (!drumRNN) {
+    drumRNN = new mm.MusicRNN(MODEL_URL);
+    await drumRNN.initialize();
+    console.log("Drum RNN Loaded!");
+  }
 }
 
 // --- File upload ---
@@ -65,11 +67,15 @@ playBtn.addEventListener("click", async () => {
   playBtn.textContent = "Loading...";
 
   try {
+    await loadRNN();
+
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     await audioContext.resume();
 
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
+
+    startTime = audioContext.currentTime;
 
     // --- Analyzer ---
     let lastNoteTime = 0;
@@ -91,19 +97,17 @@ playBtn.addEventListener("click", async () => {
         const inputWindow = rmsHistory.slice(-20);
         const beatProb = nnModel.predict(inputWindow);
 
-        // spawn note if NN predicts
-        let noteSpawned = false;
+        // spawn RMS note if NN predicts
         if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ lane: laneIndex, y: 0, hit: false });
-          noteSpawned = true;
         }
 
         // --- AI visualization ---
         aiHistory.push(beatProb);
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
-        drawAIVisualization(noteSpawned);
+        drawAIVisualization(beatProb > 0.5);
       },
     });
     analyzer.start();
@@ -112,21 +116,18 @@ playBtn.addEventListener("click", async () => {
     await audioElement.play();
     playBtn.textContent = "Playing...";
 
-    // --- Load Drum RNN ---
-    if (!drumRNN) await loadRNN();
-
-    // Generate AI drum notes
+    // --- Generate Drum RNN Notes ---
     const seedSeq = { notes: [] };
     const rnnSeq = await drumRNN.continueSequence(seedSeq, 64, 1.0);
     rnnSeq.notes.forEach(n => {
       let lane;
-      if (n.pitch === 36) lane = 0;
-      else if (n.pitch === 38) lane = 1;
-      else lane = 2;
+      if (n.pitch === 36) lane = 0;       // Kick
+      else if (n.pitch === 38) lane = 1;  // Snare
+      else lane = 2;                       // Hi-hat/other
       notes.push({ lane, y: 0, hit: false, time: n.startTime, spawned: false });
     });
 
-    gameLoop();
+    requestAnimationFrame(gameLoop);
   } catch (err) {
     console.error(err);
     playBtn.textContent = "▶️ Try Again";
@@ -142,7 +143,7 @@ window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 const NOTE_SPEED = 200;
 
 function gameLoop() {
-  const now = audioContext ? audioContext.currentTime : 0;
+  const now = audioContext ? audioContext.currentTime - startTime : 0;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // draw lanes
@@ -155,7 +156,7 @@ function gameLoop() {
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // spawn notes for Drum RNN
+  // spawn Drum RNN notes
   notes.forEach(n => {
     if (n.time && !n.spawned && n.time - now <= 1.5) n.spawned = true;
   });
@@ -164,10 +165,10 @@ function gameLoop() {
   notes.forEach(n => {
     if (n.time && !n.spawned) return;
 
-    if (!n.time) n.y += 5; // RMS notes
+    if (!n.time) n.y += 5; // RMS-based notes
     else n.y = hitY - (n.time - now) * NOTE_SPEED;
 
-    ctx.fillStyle = "red";
+    ctx.fillStyle = n.hit ? "#0ff" : "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
     const keyPressed = keys[lanes[n.lane]];
@@ -191,7 +192,7 @@ function drawAIVisualization(noteSpawned) {
     aiCtx.fillStyle = "#08f";
     aiCtx.fillRect(i, aiCanvas.height - h, 1, h);
 
-    if (val > 0.5 && noteSpawned) {
+    if (noteSpawned) {
       aiCtx.fillStyle = "#0f8";
       aiCtx.fillRect(i, 0, 1, aiCanvas.height);
     }
