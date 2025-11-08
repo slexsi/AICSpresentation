@@ -1,155 +1,131 @@
-// ===== script.js (AI-driven Magenta block notes, synced) =====
+// --- Canvas & Score ---
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
-const songUpload = document.getElementById("songUpload");
 
 const lanes = ["a", "s", "k", "l"];
 const laneWidth = canvas.width / lanes.length;
 const hitY = canvas.height - 60;
+const hitWindow = 50;
 let notes = [];
 let score = 0;
 
-// Audio
-let audioCtx, sourceNode;
-let isPlaying = false;
-let songStartTime = 0;
+// --- Audio & Buttons ---
+const songUpload = document.getElementById("songUpload");
+const playBtn = document.getElementById("playBtn");
+const audioElement = new Audio();
+audioElement.crossOrigin = "anonymous";
 
-// Magenta RNN
-let rnn;
-let sequenceToSpawn = [];
-let sequenceIndex = 0;
+let audioContext, sourceNode;
+let startTime = 0;
 
-// Random lane colors
-const laneColors = ["#0ff", "#f0f", "#ff0", "#0f8"];
+// --- AI Model ---
+let drumRNN;
+const MODEL_URL = "./models/drum_kit_rnn/";
 
-// --- Load Magenta model ---
+// Load local Drum RNN model
 async function loadRNN() {
-  console.log("⏳ Loading Magenta model...");
-  rnn = new mm.MusicRNN(window.location.origin + "/drum_kit_rnn.mag");
-  await rnn.initialize();
-  console.log("✅ Magenta model loaded successfully!");
+  drumRNN = new mm.MusicRNN(MODEL_URL);
+  await drumRNN.initialize();
+  console.log("Drum RNN Loaded!");
 }
 
-// --- Generate a seed and continuation sequence ---
-async function generateRNNSequence() {
-  if (!rnn) return;
+// --- File Upload ---
+songUpload.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  audioElement.src = URL.createObjectURL(file);
+  resetGame();
+});
 
-  // simple seed: four notes on different pitches
-  const seedSeq = mm.sequences.createNoteSequence({
-    notes: [
-      { pitch: 36, startTime: 0, endTime: 0.25 },
-      { pitch: 38, startTime: 0.5, endTime: 0.75 },
-      { pitch: 42, startTime: 1.0, endTime: 1.25 },
-      { pitch: 46, startTime: 1.5, endTime: 1.75 },
-    ],
-    totalTime: 2,
-  });
-
-  const continuation = await rnn.continueSequence(seedSeq, 32, 1.0);
-
-  // map generated notes to our lanes
-  sequenceToSpawn = continuation.notes.map(n => ({
-    time: n.startTime,
-    lane: n.pitch % 4, // simple mapping pitch -> lane index
-  }));
-
-  sequenceIndex = 0;
-}
-
-// --- Spawn notes based on current song time ---
-function spawnNotesFromRNN() {
-  if (!isPlaying) return;
-  const currentTime = audioCtx.currentTime - songStartTime; // relative to song start
-
-  while (
-    sequenceIndex < sequenceToSpawn.length &&
-    sequenceToSpawn[sequenceIndex].time <= currentTime
-  ) {
-    const laneIndex = sequenceToSpawn[sequenceIndex].lane;
-    notes.push({ lane: laneIndex, y: -20, hit: false });
-    sequenceIndex++;
+// --- Play Song ---
+playBtn.addEventListener("click", async () => {
+  if (!drumRNN) {
+    playBtn.textContent = "Loading AI...";
+    await loadRNN();
   }
-}
 
-// --- Draw & update notes ---
-function drawNotes() {
-  notes.forEach(note => {
-    ctx.fillStyle = laneColors[note.lane];
-    ctx.fillRect(note.lane * laneWidth + 10, note.y, laneWidth - 20, 20);
+  resetGame();
+  playBtn.textContent = "Playing...";
+
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  await audioContext.resume();
+
+  sourceNode = audioContext.createMediaElementSource(audioElement);
+  sourceNode.connect(audioContext.destination);
+
+  startTime = audioContext.currentTime;
+  await audioElement.play();
+
+  // --- Generate AI Notes ---
+  const seedSequence = { notes: [] }; // empty or simple pattern
+  const rnnSeq = await drumRNN.continueSequence(seedSequence, 64, 1.0);
+  notes = rnnSeq.notes.map(n => {
+    let lane;
+    if (n.pitch === 36) lane = 0; // kick
+    else if (n.pitch === 38) lane = 1; // snare
+    else lane = 2; // hi-hat / others
+    return { lane, time: n.startTime, y: 0, hit: false, spawned: false };
   });
-}
 
-function updateNotes() {
-  notes.forEach(note => (note.y += 4)); // falling speed
-  notes = notes.filter(note => note.y < canvas.height + 20 && !note.hit);
-}
+  gameLoop();
+});
 
-// --- Game loop ---
+// --- Key Input ---
+const keys = {};
+window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+// --- Game Loop ---
 function gameLoop() {
+  const now = audioContext.currentTime - startTime;
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // draw lanes
   lanes.forEach((key, i) => {
-    ctx.fillStyle = "#333";
+    ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  // hit line
+  // draw hit line
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // spawn notes from RNN
-  spawnNotesFromRNN();
+  // spawn AI notes based on time
+  notes.forEach(n => {
+    if (!n.spawned && n.time <= now) n.spawned = true;
+  });
 
-  // draw & update notes
-  drawNotes();
-  updateNotes();
+  // draw notes
+  notes.forEach(n => {
+    if (!n.spawned) return;
+    n.y += 5; // speed, adjust for tempo
+    ctx.fillStyle = "red";
+    ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
+
+    const keyPressed = keys[lanes[n.lane]];
+    if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
+      score += 100;
+      scoreEl.textContent = "Score: " + score;
+      n.hit = true;
+    }
+  });
+
+  // remove hit/off-screen notes
+  notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
   requestAnimationFrame(gameLoop);
 }
 
-// --- Key input for hits ---
-const keys = {};
-document.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; });
-document.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
-
-function checkHits() {
-  notes.forEach(note => {
-    if (keys[lanes[note.lane]] && Math.abs(note.y - hitY) < 30 && !note.hit) {
-      score += 10;
-      note.hit = true;
-      scoreEl.textContent = `Score: ${score}`;
-    }
-  });
+// --- Reset Game ---
+function resetGame() {
+  if (audioContext) audioContext.close();
+  notes = [];
+  score = 0;
+  scoreEl.textContent = "Score: 0";
+  playBtn.disabled = false;
+  playBtn.textContent = "▶️ Play Song";
+  audioElement.pause();
+  audioElement.currentTime = 0;
 }
-setInterval(checkHits, 20);
-
-// --- Start audio and RNN sequence ---
-async function startSong(file) {
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const arrayBuffer = await file.arrayBuffer();
-  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-  sourceNode = audioCtx.createBufferSource();
-  sourceNode.buffer = audioBuffer;
-  sourceNode.connect(audioCtx.destination);
-
-  // generate RNN sequence BEFORE starting audio
-  await generateRNNSequence();
-
-  songStartTime = audioCtx.currentTime;
-  sourceNode.start();
-  isPlaying = true;
-  gameLoop();
-}
-
-// --- File upload ---
-songUpload.addEventListener("change", e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  startSong(file);
-});
-
-// --- Load model on page load ---
-loadRNN();
