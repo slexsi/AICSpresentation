@@ -26,7 +26,7 @@ document.body.insertBefore(playBtn, canvas.nextSibling);
 const songUpload = document.getElementById("songUpload");
 
 // Audio
-const audioElement = new Audio("song.mp3"); // Default song
+const audioElement = new Audio(); // No default song
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
@@ -91,16 +91,14 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- neural network decision ---
+        // --- spawn RMS note if NN predicts ---
         const inputWindow = rmsHistory.slice(-20);
         const beatProb = nnModel.predict(inputWindow);
-
-        // spawn RMS note if NN predicts
         let noteSpawned = false;
         if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
-          notes.push({ lane: laneIndex, y: 0, hit: false, type: "rms" });
+          notes.push({ lane: laneIndex, y: -30, hit: false, type: "rms" });
           noteSpawned = true;
         }
 
@@ -119,14 +117,13 @@ playBtn.addEventListener("click", async () => {
     if (!drumRNN && window.mm) await loadRNN();
     if (drumRNN) {
       const seedSeq = { notes: [] };
-      const rnnSeq = await drumRNN.continueSequence(seedSeq, 64, 1.0);
+      const rnnSeq = await drumRNN.continueSequence(seedSeq, 32, 1.0);
 
       rnnSeq.notes.forEach(n => {
         let lane;
         if (n.pitch === 36) lane = 0;
         else if (n.pitch === 38) lane = 1;
-        else lane = 2;
-        // Set y = -30 so it starts above the canvas
+        else lane = Math.floor(Math.random() * lanes.length);
         notes.push({ lane, y: -30, hit: false, type: "rnn" });
       });
     }
@@ -144,7 +141,7 @@ window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; })
 window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
 // --- Main game loop ---
-const NOTE_SPEED = 5; // pixels per frame
+const NOTE_SPEED = 5;
 
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -173,7 +170,7 @@ function gameLoop() {
     }
   });
 
-  // remove notes that went off screen or were hit
+  // remove off-screen or hit notes
   notes = notes.filter(n => !n.hit && n.y < canvas.height + 30);
 
   requestAnimationFrame(gameLoop);
