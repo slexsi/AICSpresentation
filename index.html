@@ -1,48 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AI Rhythm Game</title>
-<style>
-  body {
-    text-align: center;
-    background: #111;
-    color: white;
-    font-family: sans-serif;
-  }
-  canvas {
-    background: #222;
-    border-radius: 12px;
-    display: block;
-    margin: 20px auto;
-  }
-  button {
-    margin: 10px;
-    padding: 10px 20px;
-    font-size: 18px;
-    border: none;
-    border-radius: 8px;
-    background: #0f8;
-    cursor: pointer;
-  }
-  #score {
-    font-size: 20px;
-    margin-top: 10px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Rhythm Game 🎵</title>
+  <style>
+    body {
+      text-align: center;
+      background: #111;
+      color: white;
+      font-family: sans-serif;
+    }
+    canvas {
+      background: #222;
+      border-radius: 12px;
+      display: block;
+      margin: 20px auto;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      background: #0f8;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+    }
+    #score {
+      margin-top: 10px;
+      font-size: 20px;
+    }
+  </style>
 </head>
 <body>
-<h1>AI Rhythm Game 🎵</h1>
+  <h1>AI Rhythm Game 🎵</h1>
 
-<canvas id="gameCanvas" width="600" height="400"></canvas>
-<div id="score">Score: 0</div>
+  <!-- AI visualization canvas -->
+  <canvas id="aiCanvas" width="600" height="100"></canvas>
 
-<input type="file" id="songUpload" accept="audio/*">
-<button id="playBtn">▶️ Play Song</button>
+  <!-- Main game canvas -->
+  <canvas id="gameCanvas" width="600" height="400"></canvas>
 
-<!-- Magenta.js -->
-<script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.33.1/es6/music.js"></script>
-<script src="script.js"></script>
+  <!-- Score display -->
+  <div id="score">Score: 0</div>
+
+  <!-- Audio upload -->
+  <input type="file" id="songUpload" accept="audio/*">
+
+  <!-- Magenta Drum RNN -->
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.33.1/es6/music.js"></script>
+
+  <!-- Game logic -->
+  <script src="script.js"></script>
 </body>
 </html>
