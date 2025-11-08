@@ -26,7 +26,7 @@ document.body.insertBefore(playBtn, canvas.nextSibling);
 const songUpload = document.getElementById("songUpload");
 
 // Audio
-const audioElement = new Audio(); // No default song
+const audioElement = new Audio();
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
@@ -65,6 +65,11 @@ songUpload.addEventListener("change", (e) => {
 
 // --- Play button ---
 playBtn.addEventListener("click", async () => {
+  if (!audioElement.src) {
+    alert("Please upload a song first!");
+    return;
+  }
+
   resetGame();
   playBtn.textContent = "Loading...";
 
@@ -91,14 +96,16 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- spawn RMS note if NN predicts ---
+        // --- neural network decision ---
         const inputWindow = rmsHistory.slice(-20);
         const beatProb = nnModel.predict(inputWindow);
+
+        // spawn RMS note if NN predicts
         let noteSpawned = false;
         if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
-          notes.push({ lane: laneIndex, y: -30, hit: false, type: "rms" });
+          notes.push({ lane: laneIndex, y: 0, hit: false, type: "rms" });
           noteSpawned = true;
         }
 
@@ -110,21 +117,22 @@ playBtn.addEventListener("click", async () => {
     });
 
     analyzer.start();
+
     await audioElement.play();
     playBtn.textContent = "Playing...";
 
-    // --- Load Drum RNN and generate notes ---
+    // --- Load Drum RNN ---
     if (!drumRNN && window.mm) await loadRNN();
     if (drumRNN) {
       const seedSeq = { notes: [] };
-      const rnnSeq = await drumRNN.continueSequence(seedSeq, 32, 1.0);
+      const rnnSeq = await drumRNN.continueSequence(seedSeq, 64, 1.0);
 
       rnnSeq.notes.forEach(n => {
         let lane;
         if (n.pitch === 36) lane = 0;
         else if (n.pitch === 38) lane = 1;
-        else lane = Math.floor(Math.random() * lanes.length);
-        notes.push({ lane, y: -30, hit: false, type: "rnn" });
+        else lane = 2;
+        notes.push({ lane, y: 0, hit: false, type: "rnn", time: n.startTime, spawned: false });
       });
     }
 
@@ -141,9 +149,10 @@ window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; })
 window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
 // --- Main game loop ---
-const NOTE_SPEED = 5;
+const NOTE_SPEED = 200;
 
 function gameLoop() {
+  const now = audioContext ? audioContext.currentTime : 0;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // draw lanes
@@ -156,9 +165,21 @@ function gameLoop() {
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // move and draw notes
+  // spawn RNN notes
   notes.forEach(n => {
-    n.y += NOTE_SPEED;
+    if (n.type === "rnn" && n.time && !n.spawned && n.time - now <= 1.5) n.spawned = true;
+  });
+
+  // draw notes
+  notes.forEach(n => {
+    // skip unspawned RNN notes
+    if (n.type === "rnn" && n.time && !n.spawned) return;
+
+    // move notes
+    if (n.type === "rms") n.y += 5;
+    else if (n.type === "rnn") n.y = hitY - (n.time - now) * NOTE_SPEED;
+
+    // draw notes with color
     ctx.fillStyle = n.type === "rms" ? "red" : "blue";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
@@ -170,7 +191,7 @@ function gameLoop() {
     }
   });
 
-  // remove off-screen or hit notes
+  // remove notes that went off screen or were hit
   notes = notes.filter(n => !n.hit && n.y < canvas.height + 30);
 
   requestAnimationFrame(gameLoop);
