@@ -15,7 +15,7 @@ aiCanvas.width = 600;
 aiCanvas.height = 100;
 aiCanvas.style.background = "#111";
 aiCanvas.style.marginTop = "20px";
-document.body.insertBefore(aiCanvas, canvas);
+document.body.insertBefore(aiCanvas, canvas.nextSibling);
 const aiCtx = aiCanvas.getContext("2d");
 let aiHistory = [];
 
@@ -94,7 +94,7 @@ playBtn.addEventListener("click", async () => {
         const inputWindow = rmsHistory.slice(-20);
         const beatProb = nnModel.predict(inputWindow);
 
-        // spawn RMS note if NN predicts
+        // spawn RMS note
         let noteSpawned = false;
         if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
@@ -118,7 +118,7 @@ playBtn.addEventListener("click", async () => {
     // --- Load Drum RNN ---
     if (!drumRNN) await loadRNN();
 
-    // Generate AI drum notes
+    // Generate Drum RNN notes
     const seedSeq = { notes: [] };
     const rnnSeq = await drumRNN.continueSequence(seedSeq, 64, 1.0);
     rnnSeq.notes.forEach(n => {
@@ -153,7 +153,7 @@ function gameLoop() {
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  // hit line
+  // draw hit line
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
@@ -166,13 +166,15 @@ function gameLoop() {
   notes.forEach(n => {
     if (n.type === "rnn" && !n.spawned) return;
 
-    if (n.type === "rms") n.y += 5; // RMS notes
-    else if (n.type === "rnn") n.y = hitY - (n.time - now) * NOTE_SPEED; // RNN notes
+    // y position
+    if (n.type === "rms") n.y += 5;
+    else n.y = hitY - (n.time - now) * NOTE_SPEED;
 
-    // different colors
-    ctx.fillStyle = n.type === "rms" ? "blue" : "red";
+    // color by type
+    ctx.fillStyle = n.type === "rms" ? "red" : "blue";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
+    // hit detection
     const keyPressed = keys[lanes[n.lane]];
     if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
       score += 100;
@@ -181,6 +183,7 @@ function gameLoop() {
     }
   });
 
+  // remove off-screen or hit notes
   notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
   requestAnimationFrame(gameLoop);
