@@ -94,17 +94,19 @@ playBtn.addEventListener("click", async () => {
         const inputWindow = rmsHistory.slice(-20);
         const beatProb = nnModel.predict(inputWindow);
 
-        // spawn RMS note
+        // spawn RMS note if NN predicts
+        let noteSpawned = false;
         if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
-          notes.push({ lane: laneIndex, y: 0, hit: false, type: "RMS" });
+          notes.push({ lane: laneIndex, y: 0, hit: false, type: "rms" });
+          noteSpawned = true;
         }
 
         // --- AI visualization ---
         aiHistory.push(beatProb);
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
-        drawAIVisualization(beatProb > 0.5);
+        drawAIVisualization(noteSpawned);
       },
     });
     analyzer.start();
@@ -116,7 +118,7 @@ playBtn.addEventListener("click", async () => {
     // --- Load Drum RNN ---
     if (!drumRNN) await loadRNN();
 
-    // Generate Drum RNN notes
+    // Generate AI drum notes
     const seedSeq = { notes: [] };
     const rnnSeq = await drumRNN.continueSequence(seedSeq, 64, 1.0);
     rnnSeq.notes.forEach(n => {
@@ -124,7 +126,7 @@ playBtn.addEventListener("click", async () => {
       if (n.pitch === 36) lane = 0;
       else if (n.pitch === 38) lane = 1;
       else lane = 2;
-      notes.push({ lane, y: 0, hit: false, time: n.startTime, spawned: false, type: "RNN" });
+      notes.push({ lane, y: 0, hit: false, type: "rnn", time: n.startTime, spawned: false });
     });
 
     gameLoop();
@@ -157,24 +159,18 @@ function gameLoop() {
 
   // spawn Drum RNN notes
   notes.forEach(n => {
-    if (n.type === "RNN" && !n.spawned && n.time - now <= 1.5) n.spawned = true;
+    if (n.type === "rnn" && !n.spawned && n.time - now <= 1.5) n.spawned = true;
   });
 
   // draw notes
   notes.forEach(n => {
-    if (n.type === "RNN" && !n.spawned) return;
+    if (n.type === "rnn" && !n.spawned) return;
 
-    if (n.type === "RMS") n.y += 5; // RMS notes
-    else n.y = hitY - (n.time - now) * NOTE_SPEED; // RNN notes
+    if (n.type === "rms") n.y += 5; // RMS notes
+    else if (n.type === "rnn") n.y = hitY - (n.time - now) * NOTE_SPEED; // RNN notes
 
-    // assign colors based on lane and type
-    let color = "#f00"; // default
-    if (n.lane === 0) color = n.type === "RMS" ? "#f55" : "#a00";
-    else if (n.lane === 1) color = n.type === "RMS" ? "#55f" : "#00a";
-    else if (n.lane === 2) color = n.type === "RMS" ? "#5f5" : "#0a0";
-    else if (n.lane === 3) color = n.type === "RMS" ? "#f5f" : "#a0a";
-
-    ctx.fillStyle = color;
+    // different colors
+    ctx.fillStyle = n.type === "rms" ? "blue" : "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
     const keyPressed = keys[lanes[n.lane]];
@@ -185,7 +181,6 @@ function gameLoop() {
     }
   });
 
-  // remove notes that are hit or out of screen
   notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
   requestAnimationFrame(gameLoop);
