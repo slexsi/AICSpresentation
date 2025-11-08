@@ -33,7 +33,7 @@ let audioContext, sourceNode, startTime;
 
 // --- Drum RNN AI ---
 let drumRNN;
-const MODEL_URL = "./models/drum_kit_rnn/"; // your local folder
+const MODEL_URL = "./models/drum_kit_rnn/";
 
 async function loadRNN() {
   drumRNN = new mm.MusicRNN(MODEL_URL);
@@ -60,28 +60,30 @@ playBtn.addEventListener("click", async () => {
   playBtn.textContent = "Loading AI...";
 
   try {
-    // Load Drum RNN if not loaded
     if (!drumRNN) await loadRNN();
 
-    // Create AudioContext
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     await audioContext.resume();
 
-    // Connect audio element to AudioContext
+    // Connect audio element to context
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
-    // Play song
-    await audioElement.play();
+    // Wait for metadata to get duration
+    await new Promise(resolve => {
+      if (audioElement.duration > 0) resolve();
+      else audioElement.addEventListener('loadedmetadata', resolve, { once: true });
+    });
 
-    // Start timing AFTER song actually starts
+    // Play audio
+    await audioElement.play();
     startTime = audioContext.currentTime;
 
     // --- Generate AI Notes ---
-    const seedSequence = { notes: [] }; // start empty
+    const seedSequence = { notes: [] };
     const rnnSeq = await drumRNN.continueSequence(seedSequence, 64, 1.0);
 
-    // Scale AI note times to match uploaded song duration
+    // Scale AI notes to song duration
     const songDuration = audioElement.duration;
     const rnnDuration = rnnSeq.notes[rnnSeq.notes.length - 1]?.startTime || 1;
     const scale = songDuration / rnnDuration;
@@ -95,7 +97,7 @@ playBtn.addEventListener("click", async () => {
 
       return {
         lane,
-        time: n.startTime * scale, // scale to song duration
+        time: n.startTime * scale,
         y: 0,
         hit: false,
         spawned: false
@@ -116,7 +118,7 @@ window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; })
 window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
 // --- Main game loop ---
-const NOTE_SPEED = 200; // pixels/sec
+const NOTE_SPEED = 200;
 
 function gameLoop() {
   const now = audioContext.currentTime - startTime;
@@ -133,7 +135,7 @@ function gameLoop() {
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // spawn AI notes a bit early
+  // spawn AI notes early
   notes.forEach(n => {
     if (!n.spawned && n.time - now <= 1.5) n.spawned = true;
   });
