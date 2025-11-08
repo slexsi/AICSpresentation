@@ -26,7 +26,7 @@ document.body.insertBefore(playBtn, canvas.nextSibling);
 const songUpload = document.getElementById("songUpload");
 
 // Audio
-const audioElement = new Audio(); // no default source
+const audioElement = new Audio("song.mp3"); // Default song
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
@@ -96,16 +96,18 @@ playBtn.addEventListener("click", async () => {
         const beatProb = nnModel.predict(inputWindow);
 
         // spawn RMS note if NN predicts
+        let noteSpawned = false;
         if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ lane: laneIndex, y: 0, hit: false, type: "rms" });
+          noteSpawned = true;
         }
 
         // --- AI visualization ---
         aiHistory.push(beatProb);
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
-        drawAIVisualization(beatProb > 0.5);
+        drawAIVisualization(noteSpawned);
       },
     });
 
@@ -119,22 +121,13 @@ playBtn.addEventListener("click", async () => {
       const seedSeq = { notes: [] };
       const rnnSeq = await drumRNN.continueSequence(seedSeq, 64, 1.0);
 
-      // spawn RNN notes in a visible area
       rnnSeq.notes.forEach(n => {
         let lane;
         if (n.pitch === 36) lane = 0;
         else if (n.pitch === 38) lane = 1;
         else lane = 2;
-
-        // Adjust startTime relative to now, so they spawn correctly
-        const spawnY = -Math.random() * 50; // start slightly above screen
-        notes.push({
-          lane,
-          y: spawnY,
-          hit: false,
-          type: "rnn",
-          speed: NOTE_SPEED,
-        });
+        // Set y = -30 so it starts above the canvas
+        notes.push({ lane, y: -30, hit: false, type: "rnn" });
       });
     }
 
@@ -151,7 +144,8 @@ window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; })
 window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
 // --- Main game loop ---
-const NOTE_SPEED = 5; // all notes move at constant speed now
+const NOTE_SPEED = 5; // pixels per frame
+
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -165,10 +159,9 @@ function gameLoop() {
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // draw notes
+  // move and draw notes
   notes.forEach(n => {
     n.y += NOTE_SPEED;
-
     ctx.fillStyle = n.type === "rms" ? "red" : "blue";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
