@@ -51,32 +51,55 @@ songUpload.addEventListener("change", (e) => {
 
 // --- Play button ---
 playBtn.addEventListener("click", async () => {
+  if (!audioElement.src) {
+    alert("Please upload a song first!");
+    return;
+  }
+
   resetGame();
   playBtn.textContent = "Loading AI...";
 
   try {
+    // Load Drum RNN if not loaded
     if (!drumRNN) await loadRNN();
 
+    // Create AudioContext
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     await audioContext.resume();
 
+    // Connect audio element to AudioContext
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
-    startTime = audioContext.currentTime;
-
+    // Play song
     await audioElement.play();
+
+    // Start timing AFTER song actually starts
+    startTime = audioContext.currentTime;
 
     // --- Generate AI Notes ---
     const seedSequence = { notes: [] }; // start empty
     const rnnSeq = await drumRNN.continueSequence(seedSequence, 64, 1.0);
+
+    // Scale AI note times to match uploaded song duration
+    const songDuration = audioElement.duration;
+    const rnnDuration = rnnSeq.notes[rnnSeq.notes.length - 1]?.startTime || 1;
+    const scale = songDuration / rnnDuration;
+
     notes = rnnSeq.notes.map(n => {
       let lane;
       if (n.pitch === 36) lane = 0; // kick
       else if (n.pitch === 38) lane = 1; // snare
-      else lane = 2; // hi-hat/others
+      else if (n.pitch === 42) lane = 2; // hi-hat
+      else lane = 3; // others
 
-      return { lane, time: n.startTime, y: 0, hit: false, spawned: false };
+      return {
+        lane,
+        time: n.startTime * scale, // scale to song duration
+        y: 0,
+        hit: false,
+        spawned: false
+      };
     });
 
     playBtn.textContent = "Playing...";
@@ -132,7 +155,7 @@ function gameLoop() {
     }
   });
 
-  // keep AI visualization (optional: mark spawned notes)
+  // AI visualization
   aiHistory.push(notes.filter(n => n.spawned && !n.hit).length / lanes.length);
   if (aiHistory.length > aiCanvas.width) aiHistory.shift();
   drawAIVisualization();
