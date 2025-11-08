@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Rhythm Demo</title>
+  <title>AI Rhythm Neural Network</title>
   <style>
     body {
       text-align: center;
@@ -28,37 +28,24 @@
       background: #0f8;
       cursor: pointer;
     }
-    button:disabled {
-      opacity: 0.6;
-    }
-    #score {
-      margin-top: 10px;
-      font-size: 20px;
-    }
+    button:disabled { opacity: 0.6; }
+    #score { margin-top: 10px; font-size: 20px; }
   </style>
 </head>
 <body>
-  <h1>AI Rhythm Demo 🎵</h1>
+  <h1>AI Rhythm Neural Network 🎵</h1>
 
-  <!-- RMS / AI visualization canvas -->
-  <canvas id="rmsCanvas" width="600" height="100"></canvas>
-
-  <!-- Main game canvas -->
+  <!-- Game canvas -->
   <canvas id="gameCanvas" width="600" height="400"></canvas>
-
-  <!-- Score display -->
   <div id="score">Score: 0</div>
 
   <!-- Audio upload -->
   <input type="file" id="songUpload" accept="audio/*">
 
-  <!-- Meyda library -->
-  <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
-
-  <!-- Magenta Drum RNN -->
+  <!-- Magenta.js -->
   <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.26.0/dist/magenta.js"></script>
 
-  <!-- Game logic -->
+  <!-- Game script -->
   <script src="script.js"></script>
 </body>
 </html>
