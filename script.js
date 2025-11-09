@@ -80,7 +80,7 @@ class RealNeuralNetwork {
     const normalizedInput = [
       input.accuracy,
       Math.min(input.streak / 10, 1),
-      input.misses / 10,
+      Math.min(input.misses / 10, 1),
       input.musicIntensity
     ];
 
@@ -113,13 +113,16 @@ class RealNeuralNetwork {
 
   // Train the neural network with player data
   train(input, target) {
-    this.trainingData.push({ input, target });
-    if (this.trainingData.length > 100) this.trainingData.shift();
-    this.trainingSamples++;
+    // Only train when we have meaningful gameplay data
+    if (input.hits + input.misses > 0) {
+      this.trainingData.push({ input, target });
+      if (this.trainingData.length > 100) this.trainingData.shift();
+      this.trainingSamples++;
 
-    // Train every 10 samples
-    if (this.trainingSamples % 10 === 0) {
-      this.updateWeights();
+      // Train every 10 samples
+      if (this.trainingSamples % 10 === 0) {
+        this.updateWeights();
+      }
     }
   }
 
@@ -156,19 +159,23 @@ class RealNeuralNetwork {
       accuracy: playerStats.hits / (playerStats.hits + playerStats.misses || 1),
       streak: playerStats.currentStreak,
       misses: playerStats.missesLast10,
-      musicIntensity: musicIntensity
+      musicIntensity: musicIntensity,
+      hits: playerStats.hits,
+      misses: playerStats.misses
     };
 
     // Get neural network prediction
     const prediction = this.forward(input);
 
-    // Train based on performance (target: maintain good gameplay)
-    const target = {
-      speed: input.accuracy < 0.6 ? 0.2 : input.accuracy > 0.8 ? 0.8 : 0.5,
-      shouldSpawn: musicIntensity > 0.3
-    };
-    
-    this.train(input, target);
+    // Train based on performance (only when we have gameplay data)
+    if (playerStats.hits + playerStats.misses > 0) {
+      const target = {
+        speed: input.accuracy < 0.6 ? 0.2 : input.accuracy > 0.8 ? 0.8 : 0.5,
+        shouldSpawn: musicIntensity > 0.3
+      };
+      
+      this.train(input, target);
+    }
 
     return {
       speed: prediction.speed,
@@ -218,6 +225,7 @@ playBtn.addEventListener("click", async () => {
     sourceNode.connect(audioContext.destination);
 
     let lastNoteTime = 0;
+    let forceSpawnTimer = 0;
 
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
@@ -240,12 +248,18 @@ playBtn.addEventListener("click", async () => {
         const recentRms = rmsHistory.slice(-10).reduce((a, b) => a + b, 0) / 10;
         const aiDecision = adaptiveAI.update(playerStats, recentRms);
 
-        // spawn note if NN predicts (combining rhythm + AI)
+        // FIXED: Force spawn notes if no notes for too long
+        forceSpawnTimer += 0.1;
         let noteSpawned = false;
-        const shouldSpawn = aiDecision.shouldSpawn && (now - lastNoteTime > 0.2);
+        
+        // Spawn note if: AI predicts OR music is loud OR no notes for 2 seconds
+        const shouldSpawn = (aiDecision.shouldSpawn && (now - lastNoteTime > 0.2)) || 
+                           (recentRms > 0.3 && (now - lastNoteTime > 0.3)) ||
+                           (forceSpawnTimer > 2.0);
 
-        if (shouldSpawn) {
+        if (shouldSpawn && (now - lastNoteTime > 0.2)) {
           lastNoteTime = now;
+          forceSpawnTimer = 0; // Reset timer
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ 
             lane: laneIndex, 
@@ -260,7 +274,8 @@ playBtn.addEventListener("click", async () => {
         aiHistory.push({
           speed: aiDecision.speed / 7, // Normalize for display
           difficulty: aiDecision.difficulty,
-          spawned: noteSpawned ? 1 : 0
+          spawned: noteSpawned ? 1 : 0,
+          music: recentRms
         });
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
         drawAIVisualization(aiDecision);
@@ -302,9 +317,13 @@ window.addEventListener("keydown", (e) => {
       playerStats.currentStreak++;
       playerStats.lastTenHits.push(true);
     } else {
-      playerStats.misses++;
-      playerStats.currentStreak = 0;
-      playerStats.lastTenHits.push(false);
+      // Only count as miss if there are active notes
+      const hasActiveNotes = notes.some(n => !n.hit && n.y < canvas.height);
+      if (hasActiveNotes) {
+        playerStats.misses++;
+        playerStats.currentStreak = 0;
+        playerStats.lastTenHits.push(false);
+      }
     }
     
     // Keep last 10 hits for recent accuracy
@@ -330,8 +349,8 @@ function gameLoop() {
   });
 
   // draw hit line with AI difficulty color
-  const difficultyColor = adaptiveAI.trainingSamples > 20 ? 
-                         (adaptiveAI.forward(playerStats, 0.5).rawOutput[0] > 0.6 ? "#ff4444" : "#44ff44") : "yellow";
+  const currentSpeed = notes[0]?.speed || 5;
+  const difficultyColor = currentSpeed > 6 ? "#ff4444" : currentSpeed > 5 ? "#ffff44" : "#44ff44";
   ctx.fillStyle = difficultyColor;
   ctx.fillRect(0, hitY, canvas.width, 5);
 
@@ -348,7 +367,7 @@ function gameLoop() {
       n.hit = true;
     }
 
-    // Track missed notes for neural network
+    // Track missed notes for neural network (only count if note was hittable)
     if (n.y > hitY + hitWindow && !n.hit) {
       n.hit = true;
       playerStats.misses++;
@@ -366,7 +385,8 @@ function gameLoop() {
   ctx.fillStyle = "white";
   ctx.font = "14px Arial";
   ctx.fillText(`AI Samples: ${adaptiveAI.trainingSamples}`, 10, 30);
-  ctx.fillText(`Speed: ${notes[0]?.speed?.toFixed(1) || 5.0}`, 10, 50);
+  ctx.fillText(`Speed: ${currentSpeed.toFixed(1)}`, 10, 50);
+  ctx.fillText(`Notes: ${notes.length}`, 10, 70);
 
   requestAnimationFrame(gameLoop);
 }
@@ -381,10 +401,10 @@ function drawAIVisualization(aiDecision) {
     aiCtx.fillStyle = "#08f";
     aiCtx.fillRect(i, aiCanvas.height - speedHeight, 1, speedHeight);
 
-    // Draw difficulty level
-    const difficultyHeight = data.difficulty * aiCanvas.height * 0.3;
-    aiCtx.fillStyle = "#f08";
-    aiCtx.fillRect(i, aiCanvas.height - difficultyHeight, 1, difficultyHeight);
+    // Draw music intensity
+    const musicHeight = data.music * aiCanvas.height * 0.5;
+    aiCtx.fillStyle = "#f80";
+    aiCtx.fillRect(i, aiCanvas.height - musicHeight, 1, musicHeight);
 
     // mark when note spawned
     if (data.spawned) {
@@ -396,8 +416,8 @@ function drawAIVisualization(aiDecision) {
   // Draw legends
   aiCtx.fillStyle = "#08f";
   aiCtx.fillText("Speed", 10, 15);
-  aiCtx.fillStyle = "#f08";
-  aiCtx.fillText("Difficulty", 10, 30);
+  aiCtx.fillStyle = "#f80";
+  aiCtx.fillText("Music", 10, 30);
   aiCtx.fillStyle = "#0f8";
   aiCtx.fillText("Note Spawn", 10, 45);
 }
