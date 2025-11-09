@@ -1,3 +1,4 @@
+// --- Setup canvas ---
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
@@ -15,7 +16,7 @@ playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas.nextSibling);
 const songUpload = document.getElementById("songUpload");
 
-// Audio
+// Audio element
 const audioElement = new Audio();
 audioElement.crossOrigin = "anonymous";
 
@@ -23,33 +24,36 @@ let audioContext, sourceNode, analyzer;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
 
-// --- AI speed ---
-let currentSpeed = 5;          // initial note speed
-const smoothingFactor = 0.05;  // smoothing for gradual change
+// --- Note speed ---
+let currentSpeed = 5;
+const smoothingFactor = 0.05;
 
-// --- Neural network: multi-level beat detection ---
-function getShortTermEnergy(history, windowSize = 10) {
-  const recent = history.slice(-windowSize);
-  const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
-  return avg;
+// --- Neural Network (Magenta.js MusicRNN) ---
+let rnn;
+async function loadRNN() {
+  rnn = new mm.MusicRNN(
+    "https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/drum_kit_rnn"
+  );
+  await rnn.initialize();
+  console.log("MusicRNN loaded!");
 }
 
-let nnModel = {
-  predict: (input) => {
-    const avgEnergy = getShortTermEnergy(input, 10);
-    const last = input[input.length - 1] || 0;
-    const delta = last - (input[input.length - 2] || 0);
+// --- Use RNN to get speed factor ---
+async function getSpeedFactor() {
+  if (!rnn) return 1.0;
 
-    // Combine base energy + spike detection
-    let beatProb = avgEnergy * 10 + delta * 50;
-    beatProb = Math.min(Math.max(beatProb, 0), 1);
+  // Simple seed rhythm: single kick drum
+  const seed = { notes: [{ pitch: 36, startTime: 0, endTime: 0.25 }], totalTime: 1 };
 
-    // Map to speed levels: slow (3), medium (6), fast (10)
-    if (beatProb > 0.6) return 10;
-    if (beatProb > 0.2) return 6;
-    return 3;
-  }
-};
+  // Generate short sequence
+  const sequence = await rnn.continueSequence(seed, 20, 1.0);
+
+  // Calculate "beat intensity" as note density
+  const density = sequence.notes.length / sequence.totalTime;
+
+  // Map density to speed factor (1 = normal, up to 3 = very fast)
+  return Math.min(1 + density, 3);
+}
 
 // --- File upload ---
 songUpload.addEventListener("change", (e) => {
@@ -62,9 +66,14 @@ songUpload.addEventListener("change", (e) => {
 // --- Play button ---
 playBtn.addEventListener("click", async () => {
   resetGame();
-  playBtn.textContent = "Loading...";
+  playBtn.textContent = "Loading NN...";
 
   try {
+    // Load the neural network
+    await loadRNN();
+
+    playBtn.textContent = "Playing...";
+    
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     await audioContext.resume();
 
@@ -78,30 +87,31 @@ playBtn.addEventListener("click", async () => {
       source: sourceNode,
       bufferSize: 1024,
       featureExtractors: ["rms"],
-      callback: (features) => {
+      callback: async (features) => {
         if (!features) return;
         const rms = features.rms;
         const now = audioContext.currentTime;
 
+        // store RMS history
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- Predict speed from multi-level beat detection ---
-        const targetSpeed = nnModel.predict(rmsHistory);
+        // --- Neural network adjusts speed ---
+        const speedFactor = await getSpeedFactor();
+        const targetSpeed = 3 + speedFactor * 5; // speed 3-8
         currentSpeed += (targetSpeed - currentSpeed) * smoothingFactor;
 
-        // Spawn note if beat probability (speed > 3.5)
-        if (targetSpeed > 3.5 && now - lastNoteTime > 0.2) {
+        // --- Existing note spawning (optional) ---
+        if (rms > 0.1 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ lane: laneIndex, y: 0, hit: false, speed: currentSpeed });
         }
-      },
+      }
     });
 
     analyzer.start();
     await audioElement.play();
-    playBtn.textContent = "Playing...";
     gameLoop();
   } catch (err) {
     console.error(err);
@@ -128,9 +138,9 @@ function gameLoop() {
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // --- Draw AI speed bar above hit line ---
-  const barWidth = (currentSpeed / 10) * canvas.width;
-  const red = Math.floor((currentSpeed / 10) * 255);
+  // --- Speed bar visualization ---
+  const barWidth = (currentSpeed / 8) * canvas.width; // normalize to max speed
+  const red = Math.floor((currentSpeed / 8) * 255);
   const blue = 255 - red;
   ctx.fillStyle = `rgb(${red},0,${blue})`;
   ctx.fillRect(0, hitY - 10, barWidth, 5);
