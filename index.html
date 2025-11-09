@@ -2,108 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>AI Sketch Recognition Demo</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.0.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/quickdraw@1.0.0"></script>
+  <title>Interactive NN Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.1.0/dist/tf.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin: 20px;
-    }
-    canvas {
-      border: 2px solid #000;
-      background-color: #fff;
-      touch-action: none;
-    }
-    #guess {
-      font-weight: bold;
-      font-size: 1.2em;
-      color: #007bff;
-    }
-    button {
-      margin-top: 10px;
-      padding: 8px 16px;
-      font-size: 1em;
-      cursor: pointer;
-    }
+    body { font-family: sans-serif; text-align: center; }
+    canvas { border: 2px solid #333; cursor: crosshair; }
+    #controls { margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h1>AI Sketch Recognition Demo</h1>
-  <p>Draw something in the box below, and AI will try to guess it!</p>
-
-  <canvas id="drawCanvas" width="400" height="400"></canvas>
-  <br>
-  <button id="clearBtn">Clear</button>
-  <p>AI Guess: <span id="guess">...</span></p>
-
-  <script>
-    let model;
-    const canvas = document.getElementById('drawCanvas');
-    const ctx = canvas.getContext('2d');
-    const guessEl = document.getElementById('guess');
-    const clearBtn = document.getElementById('clearBtn');
-
-    // Drawing state
-    let drawing = false;
-
-    // Load QuickDraw model
-    async function loadModel() {
-      guessEl.innerText = 'Loading model...';
-      model = await qd.load();
-      guessEl.innerText = 'Model loaded! Start drawing!';
-    }
-    loadModel();
-
-    // Mouse / touch events
-    function getPos(e) {
-      const rect = canvas.getBoundingClientRect();
-      if (e.touches) {
-        return {
-          x: e.touches[0].clientX - rect.left,
-          y: e.touches[0].clientY - rect.top
-        };
-      } else {
-        return {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top
-        };
-      }
-    }
-
-    canvas.addEventListener('mousedown', () => drawing = true);
-    canvas.addEventListener('mouseup', () => drawing = false);
-    canvas.addEventListener('mouseout', () => drawing = false);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('touchstart', (e) => { drawing = true; e.preventDefault(); });
-    canvas.addEventListener('touchend', () => drawing = false);
-    canvas.addEventListener('touchmove', draw);
-
-    function draw(e) {
-      if (!drawing) return;
-      const pos = getPos(e);
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 8, 0, Math.PI * 2);
-      ctx.fill();
-      predict(); // Optional: predict continuously as user draws
-    }
-
-    // Clear canvas
-    clearBtn.addEventListener('click', () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      guessEl.innerText = '...';
-    });
-
-    // Predict function
-    async function predict() {
-      if (!model) return;
-      const predictions = await model.classify(canvas);
-      if (predictions.length > 0) {
-        guessEl.innerText = predictions[0].className;
-      }
-    }
-  </script>
+  <h1>Draw Something!</h1>
+  <canvas id="canvas" width="200" height="200"></canvas>
+  <div id="controls">
+    <button id="clearBtn">Clear</button>
+    <button id="predictBtn">Predict</button>
+  </div>
+  <h2 id="prediction">Prediction: </h2>
+  <script src="script.js"></script>
 </body>
 </html>
