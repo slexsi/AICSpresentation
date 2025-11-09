@@ -30,24 +30,31 @@ async function init() {
   const metadataURL = './model/metadata.json';
   model = await tmImage.load(modelURL, metadataURL);
   maxPredictions = model.getTotalClasses();
-
-  // Start prediction loop
-  window.requestAnimationFrame(loop);
 }
 
-async function loop() {
-  await predict();
-  window.requestAnimationFrame(loop);
-}
+init();
 
-async function predict() {
-  const prediction = await model.predict(canvas);
+// Submit button for prediction
+document.getElementById('submitBtn').addEventListener('click', async () => {
+  if (!model) return;
+
+  // Convert canvas to tensor
+  const img = tf.browser.fromPixels(canvas);
+  const resized = tf.image.resizeBilinear(img, [224, 224]);
+  const normalized = resized.div(255.0); // normalize if needed
+  const expanded = normalized.expandDims(0);
+
+  const prediction = await model.predict(expanded);
   let highest = prediction[0];
   prediction.forEach(p => {
     if (p.probability > highest.probability) highest = p;
   });
-  document.getElementById('prediction').innerText = `Prediction: ${highest.className}`;
-}
 
-// Start everything
-init();
+  document.getElementById('prediction').innerText = `Prediction: ${highest.className}`;
+
+  // Dispose tensors to avoid memory leaks
+  img.dispose();
+  resized.dispose();
+  normalized.dispose();
+  expanded.dispose();
+});
