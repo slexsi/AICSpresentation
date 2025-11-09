@@ -105,7 +105,10 @@ playBtn.addEventListener("click", async () => {
         if (rms > 0.1 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
-          notes.push({ lane: laneIndex, y: 0, hit: false, speed: currentSpeed });
+          // assign random color for AI influence
+          const colors = ["#ff3b3b", "#3bff3b", "#3b3bff", "#ffff3b", "#ff3bff"];
+          const color = colors[Math.floor(Math.random() * colors.length)];
+          notes.push({ lane: laneIndex, y: 0, hit: false, speed: currentSpeed, color });
         }
       }
     });
@@ -148,7 +151,7 @@ function gameLoop() {
   // Draw notes
   notes.forEach((n) => {
     n.y += n.speed;
-    ctx.fillStyle = "red";
+    ctx.fillStyle = n.color || "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
     const keyPressed = keys[lanes[n.lane]];
