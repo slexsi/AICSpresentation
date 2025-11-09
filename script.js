@@ -27,11 +27,17 @@ const historyLength = 1024 * 30;
 let currentSpeed = 5;          // initial note speed
 const smoothingFactor = 0.05;  // smoothing for gradual change
 
-// Simple NN: higher RMS -> higher beat probability
+// --- Neural network: now detects beat spikes ---
+let lastRMS = 0;
 let nnModel = {
   predict: (input) => {
-    const avg = input.reduce((a, b) => a + b, 0) / input.length;
-    return Math.min(avg * 20, 1);
+    const avg = input.reduce((a,b) => a+b,0)/input.length;
+    const last = input[input.length-1] || 0;
+    const delta = last - lastRMS; // detect sudden spikes
+    lastRMS = last;
+    // combine average energy and sudden change
+    const beatProb = Math.min(Math.max(avg*15 + delta*50, 0), 1);
+    return beatProb;
   }
 };
 
@@ -151,6 +157,7 @@ function resetGame() {
   score = 0;
   rmsHistory = [];
   currentSpeed = 5;
+  lastRMS = 0;
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
