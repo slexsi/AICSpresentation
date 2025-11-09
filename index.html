@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QuickDraw</title>
+  <title>Sketch Recognition</title>
   <style>
     body { text-align: center; background: #111; color: white; font-family: Arial; margin: 0; padding: 20px; }
     h1 { color: #0f8; margin-bottom: 10px; }
@@ -24,20 +24,20 @@
 </head>
 <body>
   <div class="container">
-    <h1>🎨 Real QuickDraw AI</h1>
-    <div class="instructions">Using actual QuickDraw model trained on 50 million doodles!</div>
+    <h1>Sketch Recognition</h1>
+    <div class="instructions">Real AI trained to recognize drawings and sketches</div>
     
     <div class="game-area">
       <div class="drawing-board">
         <canvas id="drawingCanvas" width="400" height="400"></canvas>
         <div>
           <button id="clearBtn">🧹 Clear</button>
-          <button id="guessBtn">🤖 QuickDraw Guess</button>
+          <button id="guessBtn">🤖 AI Guess</button>
         </div>
       </div>
       
       <div class="ai-panel">
-        <button id="loadAI">Load QuickDraw</button>
+        <button id="loadAI">Load Model</button>
         <div id="aiStatus">AI: Not Loaded</div>
         <div class="predictions" id="predictions"></div>
         <div id="currentGuess" style="font-size: 24px; font-weight: bold; margin: 20px 0;"></div>
@@ -45,8 +45,7 @@
     </div>
     
     <div class="instructions">
-      <strong>Real QuickDraw Model:</strong> Trained on 50 million doodles<br>
-      <strong>345 categories:</strong> cat, house, tree, smiley face, etc.
+      <strong>Best results:</strong> Draw clear, simple shapes like cat, house, tree, face, car
     </div>
   </div>
 
