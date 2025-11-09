@@ -4,6 +4,10 @@ body {
   margin-top: 20px;
 }
 
+#drawCanvas {
+  cursor: crosshair;
+}
+
 #prediction {
   font-size: 1.5em;
   margin-top: 10px;
