@@ -3,125 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Drawing Guesser</title>
+  <title>AI Drawing Classifier</title>
   <style>
-    body {
-      text-align: center;
-      background: #111;
-      color: white;
-      font-family: 'Arial', sans-serif;
-      margin: 0;
-      padding: 20px;
-    }
-    
-    h1 {
-      color: #0f8;
-      margin-bottom: 10px;
-    }
-    
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    
-    .game-area {
-      display: flex;
-      gap: 20px;
-      margin: 20px 0;
-    }
-    
-    .drawing-board {
-      flex: 1;
-    }
-    
-    .ai-panel {
-      flex: 1;
-      background: #222;
-      padding: 20px;
-      border-radius: 12px;
-    }
-    
-    canvas {
-      background: white;
-      border: 3px solid #333;
-      border-radius: 12px;
-      cursor: crosshair;
-    }
-    
-    button {
-      margin: 10px;
-      padding: 12px 24px;
-      font-size: 16px;
-      border: none;
-      border-radius: 8px;
-      background: #0f8;
-      color: #111;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    
-    button:hover {
-      background: #2fa;
-    }
-    
-    #loadAI {
-      background: #48f;
-    }
-    
-    #loadAI:hover {
-      background: #6af;
-    }
-    
-    #guessBtn {
-      background: #f80;
-    }
-    
-    #guessBtn:hover {
-      background: #fa0;
-    }
-    
-    .predictions {
-      margin: 20px 0;
-      text-align: left;
-    }
-    
-    .prediction-bar {
-      margin: 8px 0;
-      background: #333;
-      border-radius: 20px;
-      overflow: hidden;
-    }
-    
-    .prediction-fill {
-      background: linear-gradient(90deg, #0f8, #2fa);
-      height: 30px;
-      display: flex;
-      align-items: center;
-      padding-left: 15px;
-      color: #111;
-      font-weight: bold;
-      transition: width 0.5s ease;
-    }
-    
-    #aiStatus {
-      margin: 10px 0;
-      padding: 10px;
-      border-radius: 8px;
-      background: #333;
-    }
-    
-    .instructions {
-      color: #888;
-      margin: 15px 0;
-    }
+    body { text-align: center; background: #111; color: white; font-family: Arial; margin: 0; padding: 20px; }
+    h1 { color: #0f8; margin-bottom: 10px; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .game-area { display: flex; gap: 20px; margin: 20px 0; }
+    .drawing-board, .ai-panel { flex: 1; }
+    .ai-panel { background: #222; padding: 20px; border-radius: 12px; }
+    canvas { background: white; border: 3px solid #333; border-radius: 12px; cursor: crosshair; }
+    button { margin: 10px; padding: 12px 24px; font-size: 16px; border: none; border-radius: 8px; background: #0f8; color: #111; cursor: pointer; font-weight: bold; }
+    button:hover { background: #2fa; }
+    #loadAI { background: #48f; }
+    #loadAI:hover { background: #6af; }
+    #guessBtn { background: #f80; }
+    #guessBtn:hover { background: #fa0; }
+    .prediction-bar { margin: 8px 0; background: #333; border-radius: 20px; overflow: hidden; }
+    .prediction-fill { background: linear-gradient(90deg, #0f8, #2fa); height: 30px; display: flex; align-items: center; padding-left: 15px; color: #111; font-weight: bold; transition: width 0.5s ease; }
+    #aiStatus { margin: 10px 0; padding: 10px; border-radius: 8px; background: #333; }
+    .instructions { color: #888; margin: 15px 0; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>AI Drawing Guesser</h1>
-    <div class="instructions">
-      Draw something in the canvas and let the AI guess what it is!
-    </div>
+    <h1>AI Drawing Classifier</h1>
+    <div class="instructions">Uses Google's MobileNet - Real Neural Network</div>
     
     <div class="game-area">
       <div class="drawing-board">
@@ -135,24 +41,21 @@
       <div class="ai-panel">
         <button id="loadAI">Load AI Model</button>
         <div id="aiStatus">AI: Not Loaded</div>
-        
-        <div class="predictions" id="predictions">
-          <div class="instructions">Draw something and click "AI Guess"!</div>
-        </div>
-        
+        <div class="predictions" id="predictions"></div>
         <div id="currentGuess" style="font-size: 24px; font-weight: bold; margin: 20px 0;"></div>
       </div>
     </div>
     
     <div class="instructions">
-      Try drawing: Cat 🐱, House 🏠, Tree 🌳, Smiley 😊, Car 🚗
+      <strong>Real AI Model:</strong> MobileNet v1 (pre-trained on 1.4 million images)<br>
+      <strong>Try drawing:</strong> Simple shapes like cat, house, tree, face
     </div>
   </div>
 
-  <!-- TensorFlow.js for the AI -->
+  <!-- TensorFlow.js for the REAL AI -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
   
-  <!-- Game Logic -->
+  <!-- REAL AI Logic -->
   <script src="script.js"></script>
 </body>
 </html>
