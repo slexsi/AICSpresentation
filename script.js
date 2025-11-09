@@ -36,7 +36,7 @@ mlControls.innerHTML = `
 document.body.insertBefore(mlControls, canvas.nextSibling);
 
 // Audio
-const audioElement = new Audio("song.mp3");
+const audioElement = new Audio();
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
@@ -48,15 +48,20 @@ let model;
 let isTraining = false;
 let trainingData = [];
 const MAX_TRAINING_DATA = 1000;
+let playerStats = {
+  hits: 0,
+  misses: 0,
+  accuracy: 0.5,
+  currentStreak: 0,
+  totalNotes: 0
+};
 
 // Initialize the neural network
 async function createModel() {
   model = tf.sequential({
     layers: [
-      // Input: [rms, accuracy, streak, difficulty, timing]
       tf.layers.dense({ inputShape: [5], units: 16, activation: 'relu' }),
       tf.layers.dense({ units: 8, activation: 'relu' }),
-      // Output: [should_spawn, optimal_difficulty]
       tf.layers.dense({ units: 2, activation: 'sigmoid' })
     ]
   });
@@ -67,7 +72,6 @@ async function createModel() {
     metrics: ['accuracy']
   });
 
-  // Try to load saved model
   await loadModel();
   return model;
 }
@@ -75,7 +79,7 @@ async function createModel() {
 // Collect training data during gameplay
 function collectTrainingData(inputFeatures, actualResult, playerAction) {
   if (trainingData.length >= MAX_TRAINING_DATA) {
-    trainingData.shift(); // Remove oldest data
+    trainingData.shift();
   }
 
   trainingData.push({
@@ -91,8 +95,8 @@ function collectTrainingData(inputFeatures, actualResult, playerAction) {
 
 // Train the model
 async function trainModel() {
-  if (trainingData.length < 50) {
-    alert(`Need at least 50 samples to train. Currently: ${trainingData.length}`);
+  if (trainingData.length < 20) {
+    alert(`Need at least 20 samples to train. Currently: ${trainingData.length}`);
     return;
   }
 
@@ -102,31 +106,18 @@ async function trainModel() {
   trainBtn.disabled = true;
 
   try {
-    // Prepare training data
-    const inputs = [];
-    const outputs = [];
-
-    trainingData.forEach(data => {
-      inputs.push(data.input);
-      outputs.push(data.output);
-    });
+    const inputs = trainingData.map(data => data.input);
+    const outputs = trainingData.map(data => data.output);
 
     const inputTensor = tf.tensor2d(inputs);
     const outputTensor = tf.tensor2d(outputs);
 
-    // Train the model
     await model.fit(inputTensor, outputTensor, {
-      epochs: 50,
-      batchSize: 32,
-      validationSplit: 0.2,
-      callbacks: {
-        onEpochEnd: (epoch, logs) => {
-          console.log(`Epoch ${epoch}: loss = ${logs.loss}`);
-        }
-      }
+      epochs: 10,
+      batchSize: 8,
+      validationSplit: 0.1
     });
 
-    // Clean up tensors
     inputTensor.dispose();
     outputTensor.dispose();
 
@@ -168,7 +159,6 @@ async function loadModel() {
 // Predict using the neural network
 async function predictWithNN(inputFeatures) {
   if (!model || trainingData.length < 10) {
-    // Fallback to simple rule-based system if no model
     const avgRms = inputFeatures[0];
     return {
       shouldSpawn: avgRms > 0.05,
@@ -210,20 +200,16 @@ playBtn.addEventListener("click", async () => {
   playBtn.textContent = "Loading...";
 
   try {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioContext || audioContext.state === 'closed') {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
     await audioContext.resume();
 
+    // Recreate source node each time
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
     let lastNoteTime = 0;
-    let playerStats = {
-      hits: 0,
-      misses: 0,
-      accuracy: 0.5,
-      currentStreak: 0,
-      totalNotes: 0
-    };
 
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
@@ -235,27 +221,22 @@ playBtn.addEventListener("click", async () => {
         const rms = features.rms;
         const now = audioContext.currentTime;
 
-        // Store RMS
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // Calculate player accuracy in real-time
         playerStats.accuracy = playerStats.hits / (playerStats.hits + playerStats.misses || 1);
         
-        // Prepare features for neural network
         const recentRms = rmsHistory.slice(-10).reduce((a, b) => a + b, 0) / 10;
         const inputFeatures = [
-          recentRms,                    // Music intensity
-          playerStats.accuracy,         // Player skill
-          playerStats.currentStreak / 10, // Current performance
-          0.5,                         // Current difficulty (placeholder)
-          Math.min((now - lastNoteTime) * 2, 1) // Time since last note
+          recentRms,
+          playerStats.accuracy,
+          playerStats.currentStreak / 10,
+          0.5,
+          Math.min((now - lastNoteTime) * 2, 1)
         ];
 
-        // Get prediction from neural network
         const prediction = await predictWithNN(inputFeatures);
 
-        // Spawn note based on neural network decision
         let noteSpawned = false;
         if (prediction.shouldSpawn && (now - lastNoteTime > 0.2)) {
           lastNoteTime = now;
@@ -270,22 +251,19 @@ playBtn.addEventListener("click", async () => {
           playerStats.totalNotes++;
         }
 
-        // Collect training data (learn from player performance)
         if (noteSpawned) {
           setTimeout(() => {
-            // Check if this note was hit (success) or missed (failure)
             const note = notes.find(n => n.spawnTime === now && !n.hit);
-            const wasHit = !note; // If note doesn't exist anymore, it was hit
+            const wasHit = !note;
             
             collectTrainingData(
               inputFeatures,
-              [wasHit ? 1 : 0, prediction.difficulty], // Target: should have spawned? what difficulty?
+              [wasHit ? 1 : 0, prediction.difficulty],
               { spawned: true, wasHit: wasHit }
             );
-          }, 1000); // Wait 1 second to see if note gets hit
+          }, 1000);
         }
 
-        // AI visualization
         aiHistory.push({
           confidence: prediction.shouldSpawn ? 1 : 0,
           difficulty: prediction.difficulty,
@@ -299,7 +277,7 @@ playBtn.addEventListener("click", async () => {
     analyzer.start();
     await audioElement.play();
     playBtn.textContent = "Playing...";
-    gameLoop(playerStats);
+    gameLoop();
   } catch (err) {
     console.error(err);
     playBtn.textContent = "▶️ Try Again";
@@ -312,7 +290,6 @@ window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
   keys[key] = true; 
   
-  // Handle hits
   const laneIndex = lanes.indexOf(key);
   if (laneIndex !== -1) {
     let hit = false;
@@ -325,12 +302,9 @@ window.addEventListener("keydown", (e) => {
       }
     });
     
-    // Update player stats for ML
     if (hit) {
-      if (typeof playerStats !== 'undefined') {
-        playerStats.hits++;
-        playerStats.currentStreak++;
-      }
+      playerStats.hits++;
+      playerStats.currentStreak++;
     }
   }
 });
@@ -340,28 +314,24 @@ window.addEventListener("keyup", (e) => {
 });
 
 // --- Main game loop ---
-function gameLoop(playerStats) {
+function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw lanes
   lanes.forEach((key, i) => {
     ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  // Draw hit line
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // Draw notes and track misses
   notes.forEach((n) => {
     n.y += 5;
     ctx.fillStyle = "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
-    // Track missed notes (passed hit line without being hit)
-    if (n.y > hitY + hitWindow && !n.hit && playerStats) {
-      n.hit = true; // Mark as hit to remove, but count as miss
+    if (n.y > hitY + hitWindow && !n.hit) {
+      n.hit = true;
       playerStats.misses++;
       playerStats.currentStreak = 0;
     }
@@ -369,13 +339,12 @@ function gameLoop(playerStats) {
 
   notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
-  // Draw ML info
   ctx.fillStyle = "white";
   ctx.font = "14px Arial";
   ctx.fillText(`Training Samples: ${trainingData.length}`, 10, 30);
-  ctx.fillText(`Model: ${isTraining ? 'Training...' : (trainingData.length > 50 ? 'Ready' : 'Needs Data')}`, 10, 50);
+  ctx.fillText(`Model: ${isTraining ? 'Training...' : (trainingData.length > 20 ? 'Ready' : 'Needs Data')}`, 10, 50);
 
-  requestAnimationFrame(() => gameLoop(playerStats));
+  requestAnimationFrame(gameLoop);
 }
 
 // --- Enhanced AI Visualization ---
@@ -383,24 +352,20 @@ function drawAIVisualization() {
   aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
   
   aiHistory.forEach((data, i) => {
-    // Draw confidence level
     const confidenceHeight = data.confidence * aiCanvas.height;
     aiCtx.fillStyle = "#08f";
     aiCtx.fillRect(i, aiCanvas.height - confidenceHeight, 1, confidenceHeight);
 
-    // Draw difficulty level
     const difficultyHeight = data.difficulty * aiCanvas.height * 0.3;
     aiCtx.fillStyle = "#f08";
     aiCtx.fillRect(i, aiCanvas.height - difficultyHeight, 1, difficultyHeight);
 
-    // Mark when note spawned
     if (data.spawned) {
       aiCtx.fillStyle = "#0f8";
       aiCtx.fillRect(i, 0, 1, aiCanvas.height);
     }
   });
 
-  // Draw legends
   aiCtx.fillStyle = "#08f";
   aiCtx.fillText("Confidence", 10, 15);
   aiCtx.fillStyle = "#f08";
@@ -409,15 +374,23 @@ function drawAIVisualization() {
   aiCtx.fillText("Note Spawn", 10, 45);
 }
 
-// --- Reset ---
+// --- Fixed Reset Function ---
 function resetGame() {
-  if (analyzer) analyzer.stop();
-  if (audioContext) audioContext.close();
-
+  if (analyzer) {
+    analyzer.stop();
+  }
+  
   notes = [];
   score = 0;
   rmsHistory = [];
   aiHistory = [];
+  playerStats = {
+    hits: 0,
+    misses: 0,
+    accuracy: 0.5,
+    currentStreak: 0,
+    totalNotes: 0
+  };
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
