@@ -5,11 +5,14 @@
   <title>Interactive AI Drawing Recognition</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.6/dist/teachablemachine-image.min.js"></script>
 </head>
 <body>
   <h1>Draw something and let AI recognize it!</h1>
-  
-  <video id="webcam" autoplay playsinline width="400" height="300"></video>
+
+  <canvas id="drawCanvas" width="400" height="400" style="border:1px solid black;"></canvas>
+  <br>
+  <button id="clearBtn">Clear</button>
   <div id="prediction">Prediction: -</div>
 
   <script src="script.js"></script>
