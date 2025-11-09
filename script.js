@@ -16,22 +16,23 @@ document.body.insertBefore(playBtn, canvas.nextSibling);
 const songUpload = document.getElementById("songUpload");
 
 // Audio
-const audioElement = new Audio("song.mp3");
+const audioElement = new Audio();
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
 
-// --- AI speed control ---
-let currentSpeed = 5; // initial note speed
-const smoothingFactor = 0.05; // smaller = slower adjustment
+// --- Neural Network / AI speed ---
+let currentSpeed = 5;          // initial note speed
+const smoothingFactor = 0.05;  // smaller = slower smoothing
 
+// Simple mock NN: higher RMS -> higher beat probability
 let nnModel = {
   predict: (input) => {
     const avg = input.reduce((a, b) => a + b, 0) / input.length;
-    return Math.min(avg * 20, 1);
-  }
+    return Math.min(avg * 20, 1); // output 0-1
+  },
 };
 
 // --- File upload ---
@@ -69,12 +70,12 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- Neural network decides beat probability ---
+        // --- Neural network calculates beat probability ---
         const inputWindow = rmsHistory.slice(-20);
         const beatProb = nnModel.predict(inputWindow);
 
-        // Smoothly tweak note speed based on beat probability
-        const targetSpeed = 3 + beatProb * 7; // 3-10 range
+        // Smoothly adjust note speed based on beat probability
+        const targetSpeed = 3 + beatProb * 7; // speed range 3-10
         currentSpeed = currentSpeed + (targetSpeed - currentSpeed) * smoothingFactor;
 
         // Spawn note if probability threshold reached
@@ -83,7 +84,7 @@ playBtn.addEventListener("click", async () => {
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ lane: laneIndex, y: 0, hit: false, speed: currentSpeed });
         }
-      }
+      },
     });
 
     analyzer.start();
@@ -105,17 +106,17 @@ window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // draw lanes
+  // Draw lanes
   lanes.forEach((key, i) => {
     ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  // draw hit line
+  // Draw hit line
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // draw notes
+  // Draw notes
   notes.forEach((n) => {
     n.y += n.speed;
     ctx.fillStyle = "red";
@@ -143,6 +144,7 @@ function resetGame() {
   score = 0;
   rmsHistory = [];
   scoreEl.textContent = "Score: 0";
+  currentSpeed = 5;
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
   audioElement.pause();
