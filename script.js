@@ -38,36 +38,41 @@ let rmsHistory = [];
 const historyLength = 1024 * 30;
 
 // --- REAL Magenta.js Integration ---
-let onsetDetector;
+let musicRNN;
 let isMagentaLoaded = false;
 let magentaActuallyWorking = false;
-let beatPredictions = [];
-let lastMagentaProcessTime = 0;
+let noteSequence = [];
 
-// Load Magenta's pre-trained onset detection model
+// Load Magenta's pre-trained MusicRNN model (CORRECT FUNCTION)
 async function loadMagentaModel() {
     modelStatus.textContent = "Magenta: Loading...";
     modelStatus.style.color = "#ff0";
     loadMagentaBtn.disabled = true;
     
     try {
-        // REAL pre-trained model for beat detection
-        onsetDetector = await mm.OnsetsAndFrames.initialize(
-            'https://storage.googleapis.com/magentadata/js/checkpoints/transcription/onsets_frames_uni'
-        );
+        // CORRECT: Use MusicRNN instead of OnsetsAndFrames
+        musicRNN = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
+        await musicRNN.initialize();
         
         // Test if it actually works
-        const testBuffer = new Float32Array(2048).fill(0.1);
-        const testPredictions = await onsetDetector.onset(testBuffer);
+        const seed = {
+            notes: [
+                { pitch: 60, quantizedStartStep: 0, quantizedEndStep: 1 },
+            ],
+            totalQuantizedSteps: 4,
+            quantizationInfo: { stepsPerQuarter: 4 }
+        };
         
-        if (testPredictions && testPredictions.length > 0) {
+        const generated = await musicRNN.continueSequence(seed, 4, 0.5);
+        
+        if (generated && generated.notes) {
             modelStatus.textContent = "Magenta: ACTIVE ✅";
             modelStatus.style.color = "#0f8";
             isMagentaLoaded = true;
             magentaActuallyWorking = true;
-            console.log("🎵 Magenta beat detection ACTIVE");
+            console.log("🎵 Magenta MusicRNN ACTIVE - Ready to generate notes!");
         } else {
-            throw new Error("Model loaded but not functioning");
+            throw new Error("Model loaded but not generating");
         }
         
     } catch (error) {
@@ -81,58 +86,58 @@ async function loadMagentaModel() {
     loadMagentaBtn.disabled = false;
 }
 
-// Process audio with REAL Magenta AI
-async function processAudioWithMagenta(audioBuffer, currentTime) {
-    if (!magentaActuallyWorking || currentTime - lastMagentaProcessTime < 0.3) {
-        return false;
-    }
+// Generate musical patterns using REAL Magenta AI
+async function generateNotesWithMagenta(musicIntensity = 0.5) {
+    if (!magentaActuallyWorking) return [];
     
     try {
-        // Convert to mono for Magenta
-        const monoAudio = convertToMono(audioBuffer);
+        // Create seed based on music intensity
+        const basePitch = 60 + Math.floor(musicIntensity * 12);
+        const seed = {
+            notes: [
+                { 
+                    pitch: basePitch, 
+                    quantizedStartStep: 0, 
+                    quantizedEndStep: 2 
+                },
+                { 
+                    pitch: basePitch + 2, 
+                    quantizedStartStep: 2, 
+                    quantizedEndStep: 4 
+                },
+            ],
+            totalQuantizedSteps: 8,
+            quantizationInfo: { stepsPerQuarter: 4 }
+        };
         
-        // REAL AI PROCESSING - This uses the pre-trained model
-        const predictions = await onsetDetector.onset(monoAudio);
-        beatPredictions = Array.from(predictions);
+        // Use temperature based on music intensity (more creative for intense parts)
+        const temperature = 0.5 + (musicIntensity * 0.5);
         
-        lastMagentaProcessTime = currentTime;
+        // REAL AI GENERATION - This uses the pre-trained MusicRNN
+        const generatedSequence = await musicRNN.continueSequence(seed, 8, temperature);
         
-        // Check if we detected any strong beats
-        const strongBeats = beatPredictions.filter(prob => prob > 0.7).length;
-        if (strongBeats > 0) {
-            console.log(`🎯 Magenta detected ${strongBeats} beats`);
-            return true;
-        }
+        // Convert Magenta's musical notes to game notes
+        const gameNotes = generatedSequence.notes.map((note, index) => {
+            // Map pitches to lanes (musical intelligence!)
+            const lane = (note.pitch - 60) % lanes.length;
+            const spawnTime = note.quantizedStartStep * 0.5; // Convert to seconds
+            
+            return {
+                lane: Math.max(0, Math.min(lanes.length - 1, lane)),
+                spawnTime: spawnTime,
+                duration: (note.quantizedEndStep - note.quantizedStartStep) * 0.5,
+                pitch: note.pitch,
+                aiGenerated: true
+            };
+        });
         
-        return false;
+        console.log("🎵 Magenta generated", gameNotes.length, "musical notes");
+        return gameNotes;
         
     } catch (error) {
-        console.error("Magenta processing error:", error);
-        magentaActuallyWorking = false;
-        modelStatus.textContent = "Magenta: ERROR ❌";
-        return false;
+        console.error("Magenta generation failed:", error);
+        return [];
     }
-}
-
-// Convert stereo to mono for Magenta
-function convertToMono(audioBuffer) {
-    if (!audioBuffer || audioBuffer.length === 0) return new Float32Array(1024);
-    
-    if (audioBuffer.length === 1) return audioBuffer[0];
-    
-    const mono = new Float32Array(audioBuffer[0].length);
-    for (let i = 0; i < audioBuffer[0].length; i++) {
-        mono[i] = (audioBuffer[0][i] + audioBuffer[1][i]) / 2;
-    }
-    return mono;
-}
-
-// Check current beat probability from Magenta
-function getCurrentBeatProbability(bufferIndex) {
-    if (!magentaActuallyWorking || beatPredictions.length === 0) return 0;
-    
-    const index = Math.min(bufferIndex % 10, beatPredictions.length - 1);
-    return beatPredictions[index] || 0;
 }
 
 // --- File upload ---
@@ -164,7 +169,8 @@ playBtn.addEventListener("click", async () => {
         sourceNode.connect(audioContext.destination);
 
         let lastNoteTime = 0;
-        let bufferIndex = 0;
+        let nextMagentaGeneration = 0;
+        let currentNoteSequence = [];
 
         // Stop when music ends
         audioElement.addEventListener('ended', () => {
@@ -178,8 +184,8 @@ playBtn.addEventListener("click", async () => {
         analyzer = Meyda.createMeydaAnalyzer({
             audioContext,
             source: sourceNode,
-            bufferSize: 2048, // Larger buffer for Magenta
-            featureExtractors: ["rms", "buffer"],
+            bufferSize: 1024,
+            featureExtractors: ["rms"],
             callback: async (features) => {
                 if (!features || !gameActive) return;
                 const rms = features.rms;
@@ -189,56 +195,60 @@ playBtn.addEventListener("click", async () => {
                 rmsHistory.push(rms);
                 if (rmsHistory.length > historyLength) rmsHistory.shift();
 
+                const recentRms = rmsHistory.slice(-10).reduce((a, b) => a + b, 0) / 10;
                 let noteSpawned = false;
                 let spawnMethod = "rhythm";
-                let beatConfidence = 0;
+                let aiConfidence = 0;
 
-                // REAL MAGENTA PROCESSING
-                if (magentaActuallyWorking && features.buffer) {
-                    const hasMagentaBeats = await processAudioWithMagenta(features.buffer, now);
-                    beatConfidence = getCurrentBeatProbability(bufferIndex);
-                    
-                    if (hasMagentaBeats && beatConfidence > 0.7 && (now - lastNoteTime > 0.2)) {
-                        lastNoteTime = now;
-                        const laneIndex = Math.floor(Math.random() * lanes.length);
-                        notes.push({ 
-                            lane: laneIndex, 
-                            y: 0, 
+                // REAL MAGENTA AI GENERATION
+                if (magentaActuallyWorking && now >= nextMagentaGeneration) {
+                    // Generate new note sequence with Magenta AI
+                    currentNoteSequence = await generateNotesWithMagenta(recentRms);
+                    nextMagentaGeneration = now + 3.0; // Generate every 3 seconds
+                    console.log("🔄 Magenta generating new pattern...");
+                }
+
+                // Use Magenta-generated notes first
+                if (magentaActuallyWorking && currentNoteSequence.length > 0) {
+                    const nextNote = currentNoteSequence[0];
+                    if (now - lastNoteTime >= nextNote.spawnTime) {
+                        notes.push({
+                            lane: nextNote.lane,
+                            y: 0,
                             hit: false,
-                            aiDetected: true, // Mark as AI-detected
-                            spawnTime: now
+                            aiDetected: true,
+                            pitch: nextNote.pitch
                         });
+                        currentNoteSequence.shift();
+                        lastNoteTime = now;
                         noteSpawned = true;
                         spawnMethod = "magenta";
+                        aiConfidence = 0.9;
                     }
                 }
 
-                // Fallback: rhythm-based spawning (if Magenta not working)
-                if (!noteSpawned && !magentaActuallyWorking) {
-                    const inputWindow = rmsHistory.slice(-20);
-                    const avgRms = inputWindow.reduce((a, b) => a + b, 0) / inputWindow.length;
-                    beatConfidence = Math.min(avgRms * 20, 1);
+                // Fallback: rhythm-based spawning
+                if (!noteSpawned) {
+                    const beatProb = Math.min(recentRms * 15, 1);
+                    aiConfidence = beatProb;
 
-                    if (beatConfidence > 0.5 && now - lastNoteTime > 0.2) {
-                        lastNoteTime = now;
+                    if (beatProb > 0.4 && now - lastNoteTime > 0.3) {
                         const laneIndex = Math.floor(Math.random() * lanes.length);
-                        notes.push({ 
-                            lane: laneIndex, 
-                            y: 0, 
+                        notes.push({
+                            lane: laneIndex,
+                            y: 0,
                             hit: false,
-                            aiDetected: false,
-                            spawnTime: now
+                            aiDetected: false
                         });
+                        lastNoteTime = now;
                         noteSpawned = true;
                         spawnMethod = "rhythm";
                     }
                 }
 
-                bufferIndex++;
-
                 // AI visualization
                 aiHistory.push({
-                    confidence: beatConfidence,
+                    confidence: aiConfidence,
                     method: spawnMethod,
                     spawned: noteSpawned ? 1 : 0,
                     magentaActive: magentaActuallyWorking ? 1 : 0
@@ -277,11 +287,15 @@ window.addEventListener("keydown", (e) => {
         let hit = false;
         notes.forEach(note => {
             if (note.lane === laneIndex && Math.abs(note.y - hitY) < hitWindow && !note.hit) {
-                // Bonus points for AI-detected beats
+                // Bonus points for AI-generated notes
                 score += note.aiDetected ? 150 : 100;
                 scoreEl.textContent = "Score: " + score;
                 note.hit = true;
                 hit = true;
+                
+                if (note.aiDetected) {
+                    console.log("🎯 Hit AI-generated note!");
+                }
             }
         });
     }
@@ -313,11 +327,18 @@ function gameLoop() {
     ctx.fillStyle = magentaActuallyWorking ? "#8f4" : "yellow";
     ctx.fillRect(0, hitY, canvas.width, 5);
 
-    // Draw notes (blue for AI-detected, red for rhythm-based)
+    // Draw notes (blue for AI-generated, red for rhythm-based)
     notes.forEach((n) => {
         n.y += 5;
         ctx.fillStyle = n.aiDetected ? "#48f" : "red";
         ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
+
+        // Show pitch for AI notes (visual indicator)
+        if (n.aiDetected && n.pitch) {
+            ctx.fillStyle = "white";
+            ctx.font = "10px Arial";
+            ctx.fillText(n.pitch - 60, n.lane * laneWidth + 15, n.y + 15);
+        }
 
         const keyPressed = keys[lanes[n.lane]];
         if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
@@ -381,7 +402,7 @@ function resetGame() {
     score = 0;
     rmsHistory = [];
     aiHistory = [];
-    beatPredictions = [];
+    noteSequence = [];
     scoreEl.textContent = "Score: 0";
     playBtn.disabled = false;
     playBtn.textContent = "▶️ Play Song";
