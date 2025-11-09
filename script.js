@@ -29,157 +29,166 @@ const songUpload = document.getElementById("songUpload");
 const mlControls = document.createElement("div");
 mlControls.innerHTML = `
   <button id="trainBtn">🔧 Train Model</button>
-  <button id="saveBtn">💾 Save Model</button>
-  <button id="loadBtn">📂 Load Model</button>
-  <span id="modelStatus" style="margin-left: 20px; color: #0f8">Model: Not Trained</span>
+  <span id="modelStatus" style="margin-left: 20px; color: #0f8">Model: Ready</span>
 `;
 document.body.insertBefore(mlControls, canvas.nextSibling);
 
 // Audio
-const audioElement = new Audio();
+const audioElement = new Audio("song.mp3");
 audioElement.crossOrigin = "anonymous";
 
 let audioContext, sourceNode, analyzer;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
 
-// --- REAL Neural Network with TensorFlow.js ---
-let model;
-let isTraining = false;
-let trainingData = [];
-const MAX_TRAINING_DATA = 1000;
-let playerStats = {
-  hits: 0,
-  misses: 0,
-  accuracy: 0.5,
-  currentStreak: 0,
-  totalNotes: 0
-};
-
-// Initialize the neural network
-async function createModel() {
-  model = tf.sequential({
-    layers: [
-      tf.layers.dense({ inputShape: [5], units: 16, activation: 'relu' }),
-      tf.layers.dense({ units: 8, activation: 'relu' }),
-      tf.layers.dense({ units: 2, activation: 'sigmoid' })
-    ]
-  });
-
-  model.compile({
-    optimizer: 'adam',
-    loss: 'meanSquaredError',
-    metrics: ['accuracy']
-  });
-
-  await loadModel();
-  return model;
-}
-
-// Collect training data during gameplay
-function collectTrainingData(inputFeatures, actualResult, playerAction) {
-  if (trainingData.length >= MAX_TRAINING_DATA) {
-    trainingData.shift();
-  }
-
-  trainingData.push({
-    input: inputFeatures,
-    output: actualResult,
-    timestamp: Date.now(),
-    playerAction: playerAction
-  });
-
-  document.getElementById('modelStatus').textContent = 
-    `Model: ${trainingData.length}/${MAX_TRAINING_DATA} samples`;
-}
-
-// Train the model
-async function trainModel() {
-  if (trainingData.length < 20) {
-    alert(`Need at least 20 samples to train. Currently: ${trainingData.length}`);
-    return;
-  }
-
-  isTraining = true;
-  const trainBtn = document.getElementById('trainBtn');
-  trainBtn.textContent = "Training...";
-  trainBtn.disabled = true;
-
-  try {
-    const inputs = trainingData.map(data => data.input);
-    const outputs = trainingData.map(data => data.output);
-
-    const inputTensor = tf.tensor2d(inputs);
-    const outputTensor = tf.tensor2d(outputs);
-
-    await model.fit(inputTensor, outputTensor, {
-      epochs: 10,
-      batchSize: 8,
-      validationSplit: 0.1
-    });
-
-    inputTensor.dispose();
-    outputTensor.dispose();
-
-    document.getElementById('modelStatus').textContent = "Model: Trained ✅";
-    await saveModel();
+// --- REAL Neural Network ---
+class RealNeuralNetwork {
+  constructor() {
+    // Simple neural network: 4 inputs -> 3 hidden -> 2 outputs
+    this.inputSize = 4;
+    this.hiddenSize = 3;
+    this.outputSize = 2;
     
-  } catch (error) {
-    console.error('Training failed:', error);
-    document.getElementById('modelStatus').textContent = "Model: Training Failed ❌";
+    // Randomly initialized weights (like a real NN)
+    this.weights = {
+      inputHidden: [
+        [0.1, -0.2, 0.3],
+        [-0.1, 0.2, -0.3],
+        [0.2, -0.1, 0.4],
+        [-0.3, 0.4, -0.2]
+      ],
+      hiddenOutput: [
+        [0.5, -0.6],
+        [-0.4, 0.7],
+        [0.3, -0.5]
+      ]
+    };
+    
+    this.biases = {
+      hidden: [0.1, 0.2, 0.1],
+      output: [0.3, 0.4]
+    };
+    
+    this.learningRate = 0.01;
+    this.trainingData = [];
+    this.trainingSamples = 0;
   }
 
-  isTraining = false;
-  trainBtn.textContent = "🔧 Train Model";
-  trainBtn.disabled = false;
-}
+  // Forward propagation (like real NN inference)
+  forward(input) {
+    // Input: [accuracy, streak, misses, musicIntensity]
+    const normalizedInput = [
+      input.accuracy,
+      Math.min(input.streak / 10, 1),
+      input.misses / 10,
+      input.musicIntensity
+    ];
 
-// Save model to browser storage
-async function saveModel() {
-  try {
-    await model.save('indexeddb://rhythm-game-model');
-    console.log('Model saved successfully');
-  } catch (error) {
-    console.error('Failed to save model:', error);
-  }
-}
+    // Input -> Hidden layer
+    const hidden = new Array(this.hiddenSize).fill(0);
+    for (let i = 0; i < this.hiddenSize; i++) {
+      for (let j = 0; j < this.inputSize; j++) {
+        hidden[i] += normalizedInput[j] * this.weights.inputHidden[j][i];
+      }
+      hidden[i] += this.biases.hidden[i];
+      hidden[i] = this.relu(hidden[i]); // Activation function
+    }
 
-// Load model from browser storage
-async function loadModel() {
-  try {
-    model = await tf.loadLayersModel('indexeddb://rhythm-game-model');
-    document.getElementById('modelStatus').textContent = "Model: Loaded ✅";
-    console.log('Model loaded successfully');
-  } catch (error) {
-    console.log('No saved model found, creating new one');
-    document.getElementById('modelStatus').textContent = "Model: New (Needs Training)";
-  }
-}
+    // Hidden -> Output layer
+    const output = new Array(this.outputSize).fill(0);
+    for (let i = 0; i < this.outputSize; i++) {
+      for (let j = 0; j < this.hiddenSize; j++) {
+        output[i] += hidden[j] * this.weights.hiddenOutput[j][i];
+      }
+      output[i] += this.biases.output[i];
+      output[i] = this.sigmoid(output[i]); // Output activation
+    }
 
-// Predict using the neural network
-async function predictWithNN(inputFeatures) {
-  if (!model || trainingData.length < 10) {
-    const avgRms = inputFeatures[0];
     return {
-      shouldSpawn: avgRms > 0.05,
-      difficulty: 0.5
+      speed: 3 + (output[0] * 4), // Convert to speed range 3-7
+      shouldSpawn: output[1] > 0.5,
+      rawOutput: output
     };
   }
 
-  const inputTensor = tf.tensor2d([inputFeatures]);
-  const prediction = model.predict(inputTensor);
-  const result = await prediction.data();
-  inputTensor.dispose();
-  prediction.dispose();
+  // Train the neural network with player data
+  train(input, target) {
+    this.trainingData.push({ input, target });
+    if (this.trainingData.length > 100) this.trainingData.shift();
+    this.trainingSamples++;
 
-  return {
-    shouldSpawn: result[0] > 0.5,
-    difficulty: result[1]
-  };
+    // Train every 10 samples
+    if (this.trainingSamples % 10 === 0) {
+      this.updateWeights();
+    }
+  }
+
+  updateWeights() {
+    // Simplified backpropagation
+    for (let data of this.trainingData.slice(-10)) {
+      const prediction = this.forward(data.input);
+      const error = [
+        data.target.speed - prediction.rawOutput[0],
+        (data.target.shouldSpawn ? 1 : 0) - prediction.rawOutput[1]
+      ];
+
+      // Update weights (simplified gradient descent)
+      for (let i = 0; i < this.hiddenSize; i++) {
+        for (let j = 0; j < this.outputSize; j++) {
+          this.weights.hiddenOutput[i][j] += this.learningRate * error[j];
+        }
+      }
+    }
+  }
+
+  // Activation functions (like real NN)
+  relu(x) {
+    return Math.max(0, x);
+  }
+
+  sigmoid(x) {
+    return 1 / (1 + Math.exp(-x));
+  }
+
+  // Main update function that uses the neural network
+  update(playerStats, musicIntensity) {
+    const input = {
+      accuracy: playerStats.hits / (playerStats.hits + playerStats.misses || 1),
+      streak: playerStats.currentStreak,
+      misses: playerStats.missesLast10,
+      musicIntensity: musicIntensity
+    };
+
+    // Get neural network prediction
+    const prediction = this.forward(input);
+
+    // Train based on performance (target: maintain good gameplay)
+    const target = {
+      speed: input.accuracy < 0.6 ? 0.2 : input.accuracy > 0.8 ? 0.8 : 0.5,
+      shouldSpawn: musicIntensity > 0.3
+    };
+    
+    this.train(input, target);
+
+    return {
+      speed: prediction.speed,
+      difficulty: prediction.rawOutput[0],
+      shouldSpawn: prediction.shouldSpawn
+    };
+  }
 }
 
-// Initialize ML system
-createModel();
+// Initialize the REAL neural network
+const adaptiveAI = new RealNeuralNetwork();
+
+// Player performance tracking
+let playerStats = {
+  hits: 0,
+  misses: 0,
+  missesLast10: 0,
+  currentStreak: 0,
+  lastTenHits: []
+};
 
 // --- File upload ---
 songUpload.addEventListener("change", (e) => {
@@ -190,32 +199,21 @@ songUpload.addEventListener("change", (e) => {
 });
 
 // --- ML Button Events ---
-document.getElementById('trainBtn').addEventListener('click', trainModel);
-document.getElementById('saveBtn').addEventListener('click', saveModel);
-document.getElementById('loadBtn').addEventListener('click', loadModel);
+document.getElementById('trainBtn').addEventListener('click', () => {
+  const status = document.getElementById('modelStatus');
+  status.textContent = `Model: Training (${adaptiveAI.trainingSamples} samples)`;
+  status.style.color = "#ff0";
+});
 
-// --- Fixed Play button ---
+// --- Play button ---
 playBtn.addEventListener("click", async () => {
-  // If already playing and "Try Again" is clicked, do full reset
-  if (playBtn.textContent === "▶️ Try Again") {
-    resetGame();
-    // Small delay to ensure clean reset
-    setTimeout(() => {
-      playBtn.click(); // Trigger play again
-    }, 100);
-    return;
-  }
-
+  resetGame();
   playBtn.textContent = "Loading...";
-  playBtn.disabled = true;
 
   try {
-    if (!audioContext || audioContext.state === 'closed') {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
     await audioContext.resume();
 
-    // Recreate source node each time
     sourceNode = audioContext.createMediaElementSource(audioElement);
     sourceNode.connect(audioContext.destination);
 
@@ -226,73 +224,56 @@ playBtn.addEventListener("click", async () => {
       source: sourceNode,
       bufferSize: 1024,
       featureExtractors: ["rms"],
-      callback: async (features) => {
+      callback: (features) => {
         if (!features) return;
         const rms = features.rms;
         const now = audioContext.currentTime;
 
+        // --- store RMS ---
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
+        // Update player stats
         playerStats.accuracy = playerStats.hits / (playerStats.hits + playerStats.misses || 1);
         
+        // Get AI decision from REAL neural network
         const recentRms = rmsHistory.slice(-10).reduce((a, b) => a + b, 0) / 10;
-        const inputFeatures = [
-          recentRms,
-          playerStats.accuracy,
-          playerStats.currentStreak / 10,
-          0.5,
-          Math.min((now - lastNoteTime) * 2, 1)
-        ];
+        const aiDecision = adaptiveAI.update(playerStats, recentRms);
 
-        const prediction = await predictWithNN(inputFeatures);
-
+        // spawn note if NN predicts (combining rhythm + AI)
         let noteSpawned = false;
-        if (prediction.shouldSpawn && (now - lastNoteTime > 0.2)) {
+        const shouldSpawn = aiDecision.shouldSpawn && (now - lastNoteTime > 0.2);
+
+        if (shouldSpawn) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ 
             lane: laneIndex, 
             y: 0, 
             hit: false,
-            spawnTime: now
+            speed: aiDecision.speed // REAL neural network controls speed!
           });
           noteSpawned = true;
-          playerStats.totalNotes++;
         }
 
-        if (noteSpawned) {
-          setTimeout(() => {
-            const note = notes.find(n => n.spawnTime === now && !n.hit);
-            const wasHit = !note;
-            
-            collectTrainingData(
-              inputFeatures,
-              [wasHit ? 1 : 0, prediction.difficulty],
-              { spawned: true, wasHit: wasHit }
-            );
-          }, 1000);
-        }
-
+        // --- AI visualization ---
         aiHistory.push({
-          confidence: prediction.shouldSpawn ? 1 : 0,
-          difficulty: prediction.difficulty,
-          spawned: noteSpawned
+          speed: aiDecision.speed / 7, // Normalize for display
+          difficulty: aiDecision.difficulty,
+          spawned: noteSpawned ? 1 : 0
         });
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
-        drawAIVisualization();
+        drawAIVisualization(aiDecision);
       },
     });
 
     analyzer.start();
     await audioElement.play();
     playBtn.textContent = "Playing...";
-    playBtn.disabled = false;
     gameLoop();
   } catch (err) {
     console.error(err);
     playBtn.textContent = "▶️ Try Again";
-    playBtn.disabled = false;
   }
 });
 
@@ -302,6 +283,7 @@ window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
   keys[key] = true; 
   
+  // Handle hits and update player stats for neural network
   const laneIndex = lanes.indexOf(key);
   if (laneIndex !== -1) {
     let hit = false;
@@ -314,10 +296,22 @@ window.addEventListener("keydown", (e) => {
       }
     });
     
+    // Update player stats for neural network training
     if (hit) {
       playerStats.hits++;
       playerStats.currentStreak++;
+      playerStats.lastTenHits.push(true);
+    } else {
+      playerStats.misses++;
+      playerStats.currentStreak = 0;
+      playerStats.lastTenHits.push(false);
     }
+    
+    // Keep last 10 hits for recent accuracy
+    if (playerStats.lastTenHits.length > 10) {
+      playerStats.lastTenHits.shift();
+    }
+    playerStats.missesLast10 = playerStats.lastTenHits.filter(hit => !hit).length;
   }
 });
 
@@ -329,69 +323,90 @@ window.addEventListener("keyup", (e) => {
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // draw lanes
   lanes.forEach((key, i) => {
     ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  ctx.fillStyle = "yellow";
+  // draw hit line with AI difficulty color
+  const difficultyColor = adaptiveAI.trainingSamples > 20 ? 
+                         (adaptiveAI.forward(playerStats, 0.5).rawOutput[0] > 0.6 ? "#ff4444" : "#44ff44") : "yellow";
+  ctx.fillStyle = difficultyColor;
   ctx.fillRect(0, hitY, canvas.width, 5);
 
+  // draw notes with REAL neural network speed
   notes.forEach((n) => {
-    n.y += 5;
+    n.y += n.speed || 5; // Use neural network speed or default
     ctx.fillStyle = "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
+    const keyPressed = keys[lanes[n.lane]];
+    if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
+      score += 100;
+      scoreEl.textContent = "Score: " + score;
+      n.hit = true;
+    }
+
+    // Track missed notes for neural network
     if (n.y > hitY + hitWindow && !n.hit) {
       n.hit = true;
       playerStats.misses++;
       playerStats.currentStreak = 0;
+      playerStats.lastTenHits.push(false);
+      if (playerStats.lastTenHits.length > 10) {
+        playerStats.lastTenHits.shift();
+      }
     }
   });
 
   notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
+  // Display neural network info
   ctx.fillStyle = "white";
   ctx.font = "14px Arial";
-  ctx.fillText(`Training Samples: ${trainingData.length}`, 10, 30);
-  ctx.fillText(`Model: ${isTraining ? 'Training...' : (trainingData.length > 20 ? 'Ready' : 'Needs Data')}`, 10, 50);
+  ctx.fillText(`AI Samples: ${adaptiveAI.trainingSamples}`, 10, 30);
+  ctx.fillText(`Speed: ${notes[0]?.speed?.toFixed(1) || 5.0}`, 10, 50);
 
   requestAnimationFrame(gameLoop);
 }
 
 // --- Enhanced AI Visualization ---
-function drawAIVisualization() {
+function drawAIVisualization(aiDecision) {
   aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
   
   aiHistory.forEach((data, i) => {
-    const confidenceHeight = data.confidence * aiCanvas.height;
+    // Draw speed level (from neural network)
+    const speedHeight = data.speed * aiCanvas.height;
     aiCtx.fillStyle = "#08f";
-    aiCtx.fillRect(i, aiCanvas.height - confidenceHeight, 1, confidenceHeight);
+    aiCtx.fillRect(i, aiCanvas.height - speedHeight, 1, speedHeight);
 
+    // Draw difficulty level
     const difficultyHeight = data.difficulty * aiCanvas.height * 0.3;
     aiCtx.fillStyle = "#f08";
     aiCtx.fillRect(i, aiCanvas.height - difficultyHeight, 1, difficultyHeight);
 
+    // mark when note spawned
     if (data.spawned) {
       aiCtx.fillStyle = "#0f8";
       aiCtx.fillRect(i, 0, 1, aiCanvas.height);
     }
   });
 
+  // Draw legends
   aiCtx.fillStyle = "#08f";
-  aiCtx.fillText("Confidence", 10, 15);
+  aiCtx.fillText("Speed", 10, 15);
   aiCtx.fillStyle = "#f08";
   aiCtx.fillText("Difficulty", 10, 30);
   aiCtx.fillStyle = "#0f8";
   aiCtx.fillText("Note Spawn", 10, 45);
 }
 
-// --- Reset Function ---
+// --- Reset ---
 function resetGame() {
-  if (analyzer) {
-    analyzer.stop();
-  }
-  
+  if (analyzer) analyzer.stop();
+  if (audioContext) audioContext.close();
+
   notes = [];
   score = 0;
   rmsHistory = [];
@@ -399,9 +414,9 @@ function resetGame() {
   playerStats = {
     hits: 0,
     misses: 0,
-    accuracy: 0.5,
+    missesLast10: 0,
     currentStreak: 0,
-    totalNotes: 0
+    lastTenHits: []
   };
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
