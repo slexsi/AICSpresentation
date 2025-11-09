@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Drawing Classifier</title>
+  <title>QuickDraw</title>
   <style>
     body { text-align: center; background: #111; color: white; font-family: Arial; margin: 0; padding: 20px; }
     h1 { color: #0f8; margin-bottom: 10px; }
@@ -15,31 +15,29 @@
     button { margin: 10px; padding: 12px 24px; font-size: 16px; border: none; border-radius: 8px; background: #0f8; color: #111; cursor: pointer; font-weight: bold; }
     button:hover { background: #2fa; }
     #loadAI { background: #48f; }
-    #loadAI:hover { background: #6af; }
     #guessBtn { background: #f80; }
-    #guessBtn:hover { background: #fa0; }
     .prediction-bar { margin: 8px 0; background: #333; border-radius: 20px; overflow: hidden; }
-    .prediction-fill { background: linear-gradient(90deg, #0f8, #2fa); height: 30px; display: flex; align-items: center; padding-left: 15px; color: #111; font-weight: bold; transition: width 0.5s ease; }
+    .prediction-fill { background: linear-gradient(90deg, #0f8, #2fa); height: 30px; display: flex; align-items: center; padding-left: 15px; color: #111; font-weight: bold; }
     #aiStatus { margin: 10px 0; padding: 10px; border-radius: 8px; background: #333; }
     .instructions { color: #888; margin: 15px 0; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>AI Drawing Classifier</h1>
-    <div class="instructions">Uses Google's MobileNet - Real Neural Network</div>
+    <h1>🎨 Real QuickDraw AI</h1>
+    <div class="instructions">Using actual QuickDraw model trained on 50 million doodles!</div>
     
     <div class="game-area">
       <div class="drawing-board">
         <canvas id="drawingCanvas" width="400" height="400"></canvas>
         <div>
           <button id="clearBtn">🧹 Clear</button>
-          <button id="guessBtn">🤖 AI Guess</button>
+          <button id="guessBtn">🤖 QuickDraw Guess</button>
         </div>
       </div>
       
       <div class="ai-panel">
-        <button id="loadAI">Load AI Model</button>
+        <button id="loadAI">Load QuickDraw</button>
         <div id="aiStatus">AI: Not Loaded</div>
         <div class="predictions" id="predictions"></div>
         <div id="currentGuess" style="font-size: 24px; font-weight: bold; margin: 20px 0;"></div>
@@ -47,15 +45,12 @@
     </div>
     
     <div class="instructions">
-      <strong>Real AI Model:</strong> MobileNet v1 (pre-trained on 1.4 million images)<br>
-      <strong>Try drawing:</strong> Simple shapes like cat, house, tree, face
+      <strong>Real QuickDraw Model:</strong> Trained on 50 million doodles<br>
+      <strong>345 categories:</strong> cat, house, tree, smiley face, etc.
     </div>
   </div>
 
-  <!-- TensorFlow.js for the REAL AI -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-  
-  <!-- REAL AI Logic -->
   <script src="script.js"></script>
 </body>
 </html>
