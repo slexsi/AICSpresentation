@@ -3,65 +3,171 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Rhythm Demo</title>
+  <title>AI Rhythm Game 🎵</title>
   <style>
     body {
       text-align: center;
       background: #111;
       color: white;
-      font-family: sans-serif;
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 20px;
     }
-    canvas {
-      background: #222;
-      border-radius: 12px;
-      margin-top: 20px;
-      display: block;
-      margin-left: auto;
-      margin-right: auto;
+    
+    h1 {
+      color: #0f8;
+      margin-bottom: 10px;
     }
-    #rmsCanvas {
-      height: 100px;
+    
+    .subtitle {
+      color: #888;
+      margin-bottom: 20px;
     }
+    
+    .controls {
+      margin: 15px 0;
+    }
+    
     button {
-      margin-top: 20px;
+      margin: 5px;
       padding: 10px 20px;
-      font-size: 18px;
+      font-size: 16px;
       border: none;
       border-radius: 8px;
       background: #0f8;
+      color: #111;
       cursor: pointer;
+      transition: all 0.2s;
     }
+    
+    button:hover {
+      background: #2fa;
+      transform: scale(1.05);
+    }
+    
     button:disabled {
       opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
     }
+    
+    #loadMagentaBtn {
+      background: #48f;
+    }
+    
+    #loadMagentaBtn:hover {
+      background: #6af;
+    }
+    
+    #modelStatus {
+      margin-left: 15px;
+      padding: 8px 15px;
+      border-radius: 20px;
+      background: #222;
+      font-size: 14px;
+    }
+    
+    canvas {
+      background: #222;
+      border-radius: 12px;
+      margin: 10px auto;
+      display: block;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    
+    #gameCanvas {
+      border: 2px solid #333;
+    }
+    
     #score {
-      margin-top: 10px;
-      font-size: 20px;
+      margin: 15px 0;
+      font-size: 24px;
+      font-weight: bold;
+      color: #0f8;
+    }
+    
+    .instructions {
+      margin: 15px 0;
+      color: #888;
+      font-size: 14px;
+    }
+    
+    .lanes {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    
+    .lane-key {
+      width: 40px;
+      height: 40px;
+      background: #333;
+      border: 2px solid #555;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    
+    .lane-key.active {
+      background: #0f8;
+      color: #111;
+      border-color: #2fa;
+    }
+    
+    input[type="file"] {
+      margin: 10px 0;
+      padding: 8px;
+      background: #222;
+      color: white;
+      border: 1px solid #444;
+      border-radius: 6px;
     }
   </style>
 </head>
 <body>
-  <h1>AI Rhythm Demo 🎵</h1>
-
-  <!-- RMS visualization canvas -->
-  <canvas id="rmsCanvas" width="600" height="100"></canvas>
-
-  <!-- Main game canvas -->
-  <canvas id="gameCanvas" width="600" height="400"></canvas>
-
-  <!-- Score display -->
+  <h1>🎵 AI Rhythm Game</h1>
+  <div class="subtitle">Magenta.js Beat Detection + Neural Network</div>
+  
+  <div class="controls">
+    <input type="file" id="songUpload" accept="audio/*">
+    <button id="playBtn">▶️ Play Song</button>
+  </div>
+  
+  <div class="controls">
+    <button id="loadMagentaBtn">🧠 Load Magenta AI</button>
+    <span id="modelStatus">Magenta: Not Loaded</span>
+  </div>
+  
+  <div class="lanes">
+    <div class="lane-key" id="keyA">A</div>
+    <div class="lane-key" id="keyS">S</div>
+    <div class="lane-key" id="keyK">K</div>
+    <div class="lane-key" id="keyL">L</div>
+  </div>
+  
   <div id="score">Score: 0</div>
+  
+  <!-- AI Visualization -->
+  <canvas id="aiCanvas" width="600" height="100"></canvas>
+  
+  <!-- Main Game Canvas -->
+  <canvas id="gameCanvas" width="600" height="400"></canvas>
+  
+  <div class="instructions">
+    Press A, S, K, L keys when notes reach the hit line!<br>
+    <span style="color: #48f;">Blue notes</span> = Magenta AI detected • 
+    <span style="color: red;">Red notes</span> = Rhythm detection
+  </div>
 
-  <!-- Audio upload -->
-  <input type="file" id="songUpload" accept="audio/*">
-
-  <!-- Meyda library -->
+  <!-- Libraries -->
   <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
-
-  <!-- ADD MAGENTA.JS RIGHT HERE -->
   <script src="https://cdn.jsdelivr.net/npm/@magenta/music@^1.0.0"></script>
-
-  <!-- Game logic -->
+  
+  <!-- Game Logic -->
   <script src="script.js"></script>
 </body>
 </html>
