@@ -27,17 +27,27 @@ const historyLength = 1024 * 30;
 let currentSpeed = 5;          // initial note speed
 const smoothingFactor = 0.05;  // smoothing for gradual change
 
-// --- Neural network: now detects beat spikes ---
-let lastRMS = 0;
+// --- Neural network: multi-level beat detection ---
+function getShortTermEnergy(history, windowSize = 10) {
+  const recent = history.slice(-windowSize);
+  const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+  return avg;
+}
+
 let nnModel = {
   predict: (input) => {
-    const avg = input.reduce((a,b) => a+b,0)/input.length;
-    const last = input[input.length-1] || 0;
-    const delta = last - lastRMS; // detect sudden spikes
-    lastRMS = last;
-    // combine average energy and sudden change
-    const beatProb = Math.min(Math.max(avg*15 + delta*50, 0), 1);
-    return beatProb;
+    const avgEnergy = getShortTermEnergy(input, 10);
+    const last = input[input.length - 1] || 0;
+    const delta = last - (input[input.length - 2] || 0);
+
+    // Combine base energy + spike detection
+    let beatProb = avgEnergy * 10 + delta * 50;
+    beatProb = Math.min(Math.max(beatProb, 0), 1);
+
+    // Map to speed levels: slow (3), medium (6), fast (10)
+    if (beatProb > 0.6) return 10;
+    if (beatProb > 0.2) return 6;
+    return 3;
   }
 };
 
@@ -76,16 +86,12 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- Neural network predicts beat probability ---
-        const inputWindow = rmsHistory.slice(-20);
-        const beatProb = nnModel.predict(inputWindow);
+        // --- Predict speed from multi-level beat detection ---
+        const targetSpeed = nnModel.predict(rmsHistory);
+        currentSpeed += (targetSpeed - currentSpeed) * smoothingFactor;
 
-        // --- Adjust note speed based only on song beat ---
-        const targetSpeed = 3 + beatProb * 7; // speed 3-10
-        currentSpeed = currentSpeed + (targetSpeed - currentSpeed) * smoothingFactor;
-
-        // Spawn note
-        if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
+        // Spawn note if beat probability (speed > 3.5)
+        if (targetSpeed > 3.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
           const laneIndex = Math.floor(Math.random() * lanes.length);
           notes.push({ lane: laneIndex, y: 0, hit: false, speed: currentSpeed });
@@ -123,7 +129,7 @@ function gameLoop() {
   ctx.fillRect(0, hitY, canvas.width, 5);
 
   // --- Draw AI speed bar above hit line ---
-  const barWidth = (currentSpeed / 10) * canvas.width; // normalize to max speed
+  const barWidth = (currentSpeed / 10) * canvas.width;
   const red = Math.floor((currentSpeed / 10) * 255);
   const blue = 255 - red;
   ctx.fillStyle = `rgb(${red},0,${blue})`;
@@ -157,7 +163,6 @@ function resetGame() {
   score = 0;
   rmsHistory = [];
   currentSpeed = 5;
-  lastRMS = 0;
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
