@@ -15,23 +15,26 @@ document.getElementById("file").addEventListener("change", function(e){
   audio = new Audio(URL.createObjectURL(file));
 });
 
-// Generate notes using Magenta Drum RNN
+// Generate notes using working Magenta Drum RNN
 document.getElementById("generateBtn").addEventListener("click", async function(){
   if (!audio) return alert("Please select an audio file first!");
 
-  const model = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/drum_kit');
+  // Working checkpoint URL
+  const model = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/drum_kit_rnn');
   await model.initialize();
 
-  // A tiny seed sequence (empty drum sequence)
+  // Tiny seed sequence (empty drum sequence)
   const seed = {
     notes: [],
     totalTime: 1
   };
 
-  const sequence = await model.continueSequence(seed, 32, 1.0); // 32 steps
-  // Convert notes to lanes
+  // Generate 32-step drum sequence
+  const sequence = await model.continueSequence(seed, 32, 1.0);
+
+  // Map notes to 4 lanes
   notes = sequence.notes.map(n => ({
-    time: n.startTime, 
+    time: n.startTime,
     lane: n.pitch % lanes
   }));
 
@@ -55,6 +58,7 @@ function draw() {
   ctx.fillRect(0, hitY, canvas.width, 4);
 
   // Draw notes
+  if (!startTime) return;
   const now = (performance.now() - startTime) / 1000;
   for (const note of notes) {
     const y = (note.time - now) * 200 + hitY; // speed multiplier
@@ -71,7 +75,9 @@ document.addEventListener("keydown", (e)=>{
   const lane = keyMap.indexOf(e.key);
   if (lane === -1) return;
 
+  if (!startTime) return;
   const now = (performance.now() - startTime) / 1000;
+
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i];
     if (note.lane === lane && Math.abs(note.time - now) < 0.2) {
