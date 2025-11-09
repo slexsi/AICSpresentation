@@ -1,67 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Rhythm Demo</title>
+  <meta charset="UTF-8">
+  <title>AI Rhythm Game</title>
   <style>
-    body {
-      text-align: center;
-      background: #111;
-      color: white;
-      font-family: sans-serif;
-    }
-    canvas {
-      background: #222;
-      border-radius: 12px;
-      margin-top: 20px;
-      display: block;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    button {
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 18px;
-      border: none;
-      border-radius: 8px;
-      background: #0f8;
-      cursor: pointer;
-    }
-    button:disabled {
-      opacity: 0.6;
-    }
-    #score {
-      margin-top: 10px;
-      font-size: 20px;
-    }
+    canvas { background: #111; display: block; margin: 0 auto; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1"></script>
 </head>
 <body>
-  <h1>AI Rhythm Demo 🎵</h1>
-
-  <!-- AI visualization canvas -->
-  <canvas id="rmsCanvas" width="600" height="100"></canvas>
-
-  <!-- Main game canvas -->
-  <canvas id="gameCanvas" width="600" height="400"></canvas>
-
-  <!-- Score display -->
-  <div id="score">Score: 0</div>
-
-  <!-- Audio upload -->
-  <input type="file" id="songUpload" accept="audio/*">
-
-  <!-- Play button -->
-  <button id="playBtn">▶️ Play Song</button>
-
-  <!-- Magenta library -->
-  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1"></script>
-
-  <!-- Meyda library -->
-  <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
-
-  <!-- Game logic -->
+  <h1 style="text-align:center; color:white;">AI Rhythm Game</h1>
+  <canvas id="gameCanvas" width="400" height="600"></canvas>
+  <input type="file" id="file" accept="audio/*">
+  <button id="generateBtn">Generate Notes</button>
   <script src="script.js"></script>
 </body>
 </html>
