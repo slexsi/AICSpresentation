@@ -2,10 +2,10 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 let drawing = false;
 
-// Set up drawing
+// Drawing setup
 canvas.addEventListener('mousedown', () => drawing = true);
-canvas.addEventListener('mouseup', () => drawing = false);
-canvas.addEventListener('mouseout', () => drawing = false);
+canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
+canvas.addEventListener('mouseout', () => { drawing = false; ctx.beginPath(); });
 canvas.addEventListener('mousemove', draw);
 
 function draw(e) {
@@ -22,26 +22,30 @@ function draw(e) {
 // Clear canvas
 document.getElementById('clearBtn').onclick = () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  document.getElementById('prediction').innerText = "Prediction: ";
 };
 
-// Load pretrained model
+// Load Teachable Machine model
 let model;
 async function loadModel() {
-  // You can replace this with your own trained Teachable Machine model URL
-  model = await tf.loadLayersModel('https://storage.googleapis.com/tfjs-models/tfjs/mnist/model.json');
+  model = await tf.loadLayersModel('YOUR_MODEL_URL/model.json'); // <-- Replace with your model URL
+  document.getElementById('prediction').innerText = "Model Loaded! Draw something.";
 }
 loadModel();
 
 // Predict drawing
 document.getElementById('predictBtn').onclick = async () => {
   if (!model) return alert("Model not loaded yet!");
+  
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const tensor = tf.browser.fromPixels(imageData, 1)
-                 .resizeNearestNeighbor([28,28])
+  const tensor = tf.browser.fromPixels(imageData)
+                 .resizeNearestNeighbor([224,224]) // Teachable Machine default
                  .toFloat()
                  .div(255.0)
-                 .reshape([1,28,28,1]);
+                 .expandDims();
+  
   const prediction = model.predict(tensor);
-  const pred = prediction.argMax(1).dataSync()[0];
-  document.getElementById('prediction').innerText = `Prediction: ${pred}`;
+  const classes = ["😃 Smile", "😢 Sad Face", "❤️ Heart", "⭐ Star"]; // Update with your classes
+  const predIndex = prediction.argMax(1).dataSync()[0];
+  document.getElementById('prediction').innerText = `Prediction: ${classes[predIndex]}`;
 };
