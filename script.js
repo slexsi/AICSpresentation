@@ -28,7 +28,7 @@ document.getElementById('clearBtn').onclick = () => {
 // Load Teachable Machine model
 let model;
 async function loadModel() {
-  model = await tf.loadLayersModel('YOUR_MODEL_URL/model.json'); // <-- Replace with your model URL
+  model = await tf.loadLayersModel('https://teachablemachine.withgoogle.com/models/y0ecP7XnZ/model.json');
   document.getElementById('prediction').innerText = "Model Loaded! Draw something.";
 }
 loadModel();
@@ -39,7 +39,7 @@ document.getElementById('predictBtn').onclick = async () => {
   
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const tensor = tf.browser.fromPixels(imageData)
-                 .resizeNearestNeighbor([224,224]) // Teachable Machine default
+                 .resizeNearestNeighbor([224,224])
                  .toFloat()
                  .div(255.0)
                  .expandDims();
