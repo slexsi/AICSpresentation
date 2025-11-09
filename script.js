@@ -26,13 +26,13 @@ playBtn.textContent = "▶️ Play Song";
 document.body.insertBefore(playBtn, canvas.nextSibling);
 const songUpload = document.getElementById("songUpload");
 
-// Add ML Controls
-const mlControls = document.createElement("div");
-mlControls.innerHTML = `
-  <button id="trainBtn">🔧 Train Model</button>
-  <span id="modelStatus" style="margin-left: 20px; color: #0f8">Model: Ready</span>
+// Add Magenta Controls
+const magentaControls = document.createElement("div");
+magentaControls.innerHTML = `
+  <button id="loadModelBtn">🧠 Load Magenta Model</button>
+  <span id="modelStatus" style="margin-left: 20px; color: #0f8">Magenta: Not Loaded</span>
 `;
-document.body.insertBefore(mlControls, canvas.nextSibling);
+document.body.insertBefore(magentaControls, canvas.nextSibling);
 
 // Audio
 const audioElement = new Audio("song.mp3");
@@ -42,170 +42,89 @@ let audioContext, sourceNode, analyzer;
 let rmsHistory = [];
 const historyLength = 1024 * 30;
 
-// --- REAL Neural Network ---
-class RealNeuralNetwork {
-  constructor() {
-    // Simple neural network: 4 inputs -> 3 hidden -> 2 outputs
-    this.inputSize = 4;
-    this.hiddenSize = 3;
-    this.outputSize = 2;
+// --- Magenta.js Real AI ---
+let musicRNN;
+let isModelLoaded = false;
+let noteSequence = [];
+
+// Load Magenta model
+async function loadMagentaModel() {
+  const status = document.getElementById('modelStatus');
+  status.textContent = "Magenta: Loading...";
+  status.style.color = "#ff0";
+  
+  try {
+    // Import Magenta - this is the REAL Google-trained model
+    musicRNN = new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
+    await musicRNN.initialize();
     
-    // Randomly initialized weights (like a real NN)
-    this.weights = {
-      inputHidden: [
-        [0.1, -0.2, 0.3],
-        [-0.1, 0.2, -0.3],
-        [0.2, -0.1, 0.4],
-        [-0.3, 0.4, -0.2]
-      ],
-      hiddenOutput: [
-        [0.5, -0.6],
-        [-0.4, 0.7],
-        [0.3, -0.5]
-      ]
-    };
-    
-    this.biases = {
-      hidden: [0.1, 0.2, 0.1],
-      output: [0.3, 0.4]
-    };
-    
-    this.learningRate = 0.01;
-    this.trainingData = [];
-    this.trainingSamples = 0;
-    this.currentSpeed = 5; // Default speed
-  }
-
-  // Forward propagation (like real NN inference)
-  forward(input) {
-    // Input: [accuracy, streak, misses, musicIntensity]
-    const normalizedInput = [
-      input.accuracy,
-      Math.min(input.streak / 10, 1),
-      Math.min(input.misses / 10, 1),
-      input.musicIntensity
-    ];
-
-    // Input -> Hidden layer
-    const hidden = new Array(this.hiddenSize).fill(0);
-    for (let i = 0; i < this.hiddenSize; i++) {
-      for (let j = 0; j < this.inputSize; j++) {
-        hidden[i] += normalizedInput[j] * this.weights.inputHidden[j][i];
-      }
-      hidden[i] += this.biases.hidden[i];
-      hidden[i] = this.relu(hidden[i]); // Activation function
-    }
-
-    // Hidden -> Output layer
-    const output = new Array(this.outputSize).fill(0);
-    for (let i = 0; i < this.outputSize; i++) {
-      for (let j = 0; j < this.hiddenSize; j++) {
-        output[i] += hidden[j] * this.weights.hiddenOutput[j][i];
-      }
-      output[i] += this.biases.output[i];
-      output[i] = this.sigmoid(output[i]); // Output activation
-    }
-
-    // Update current speed based on neural network output
-    this.currentSpeed = 3 + (output[0] * 4); // Convert to speed range 3-7
-
-    return {
-      speed: this.currentSpeed,
-      shouldSpawn: output[1] > 0.5,
-      rawOutput: output
-    };
-  }
-
-  // Train the neural network with player data
-  train(input, target) {
-    // Only train when we have meaningful gameplay data
-    if (input.hits + input.misses > 0) {
-      this.trainingData.push({ input, target });
-      if (this.trainingData.length > 100) this.trainingData.shift();
-      this.trainingSamples++;
-
-      // Train every 10 samples
-      if (this.trainingSamples % 10 === 0) {
-        this.updateWeights();
-      }
-    }
-  }
-
-  updateWeights() {
-    // Simplified backpropagation
-    for (let data of this.trainingData.slice(-10)) {
-      const prediction = this.forward(data.input);
-      const error = [
-        data.target.speed - prediction.rawOutput[0],
-        (data.target.shouldSpawn ? 1 : 0) - prediction.rawOutput[1]
-      ];
-
-      // Update weights (simplified gradient descent)
-      for (let i = 0; i < this.hiddenSize; i++) {
-        for (let j = 0; j < this.outputSize; j++) {
-          this.weights.hiddenOutput[i][j] += this.learningRate * error[j];
-        }
-      }
-    }
-  }
-
-  // Activation functions (like real NN)
-  relu(x) {
-    return Math.max(0, x);
-  }
-
-  sigmoid(x) {
-    return 1 / (1 + Math.exp(-x));
-  }
-
-  // Main update function that uses the neural network
-  update(playerStats, musicIntensity) {
-    const input = {
-      accuracy: playerStats.hits / (playerStats.hits + playerStats.misses || 1),
-      streak: playerStats.currentStreak,
-      misses: playerStats.missesLast10,
-      musicIntensity: musicIntensity,
-      hits: playerStats.hits,
-      misses: playerStats.misses
-    };
-
-    // Get neural network prediction
-    const prediction = this.forward(input);
-
-    // Train based on performance (only when we have gameplay data)
-    if (playerStats.hits + playerStats.misses > 0) {
-      const target = {
-        speed: input.accuracy < 0.6 ? 0.2 : input.accuracy > 0.8 ? 0.8 : 0.5,
-        shouldSpawn: musicIntensity > 0.3
-      };
-      
-      this.train(input, target);
-    }
-
-    return {
-      speed: this.currentSpeed, // Use the updated current speed
-      difficulty: prediction.rawOutput[0],
-      shouldSpawn: prediction.shouldSpawn
-    };
-  }
-
-  // Get current speed for all notes
-  getCurrentSpeed() {
-    return this.currentSpeed;
+    status.textContent = "Magenta: Loaded ✅";
+    status.style.color = "#0f8";
+    isModelLoaded = true;
+    console.log("Magenta model loaded successfully!");
+  } catch (error) {
+    status.textContent = "Magenta: Failed to load ❌";
+    status.style.color = "#f00";
+    console.error("Failed to load Magenta:", error);
   }
 }
 
-// Initialize the REAL neural network
-const adaptiveAI = new RealNeuralNetwork();
+// Generate notes using Magenta's pre-trained model
+async function generateNotesWithMagenta(quantizedSteps = 4) {
+  if (!isModelLoaded) return [];
+  
+  try {
+    // Create a simple seed for the AI to continue from
+    const seed = {
+      notes: [
+        { pitch: 60, quantizedStartStep: 0, quantizedEndStep: 1 }, // C
+        { pitch: 62, quantizedStartStep: 2, quantizedEndStep: 3 }, // D
+      ],
+      totalQuantizedSteps: quantizedSteps,
+      quantizationInfo: { stepsPerQuarter: 4 }
+    };
+    
+    // Let Magenta generate the continuation (REAL AI!)
+    const generatedSequence = await musicRNN.continueSequence(seed, 20, 0.5);
+    
+    // Convert Magenta's musical notes to game notes
+    const gameNotes = generatedSequence.notes.map(note => {
+      // Map pitches to lanes (60-67 maps to 0-3 lanes)
+      const lane = (note.pitch - 60) % lanes.length;
+      // Convert quantized steps to timing
+      const spawnTime = note.quantizedStartStep * 0.5; // 0.5 seconds per step
+      
+      return {
+        lane: Math.max(0, Math.min(lanes.length - 1, lane)),
+        spawnTime: spawnTime,
+        duration: (note.quantizedEndStep - note.quantizedStartStep) * 0.5
+      };
+    });
+    
+    console.log("Magenta generated notes:", gameNotes);
+    return gameNotes;
+    
+  } catch (error) {
+    console.error("Magenta generation failed:", error);
+    return [];
+  }
+}
 
-// Player performance tracking
-let playerStats = {
-  hits: 0,
-  misses: 0,
-  missesLast10: 0,
-  currentStreak: 0,
-  lastTenHits: []
-};
+// Real-time beat detection with Magenta influence
+function shouldSpawnNote(rms, lastNoteTime, currentTime, beatProbability) {
+  if (!isModelLoaded) {
+    // Fallback: simple rhythm-based spawning
+    return rms > 0.2 && (currentTime - lastNoteTime > 0.3);
+  }
+  
+  // Use Magenta's generated sequence as a guide
+  const nextNote = noteSequence.find(note => 
+    note.spawnTime > currentTime && 
+    note.spawnTime <= currentTime + 0.2
+  );
+  
+  return nextNote !== undefined;
+}
 
 // --- File upload ---
 songUpload.addEventListener("change", (e) => {
@@ -215,16 +134,12 @@ songUpload.addEventListener("change", (e) => {
   resetGame();
 });
 
-// --- ML Button Events ---
-document.getElementById('trainBtn').addEventListener('click', () => {
-  const status = document.getElementById('modelStatus');
-  status.textContent = `Model: Training (${adaptiveAI.trainingSamples} samples)`;
-  status.style.color = "#ff0";
-});
+// --- Magenta Button Events ---
+document.getElementById('loadModelBtn').addEventListener('click', loadMagentaModel);
 
 // --- Play button ---
 playBtn.addEventListener("click", async () => {
-  if (gameActive) return; // Prevent multiple plays
+  if (gameActive) return;
   
   resetGame();
   playBtn.textContent = "Loading...";
@@ -238,9 +153,14 @@ playBtn.addEventListener("click", async () => {
     sourceNode.connect(audioContext.destination);
 
     let lastNoteTime = 0;
-    let forceSpawnTimer = 0;
 
-    // FIXED: Stop when music ends
+    // Generate note sequence with Magenta when song starts
+    if (isModelLoaded) {
+      noteSequence = await generateNotesWithMagenta();
+      console.log("Using Magenta-generated sequence:", noteSequence);
+    }
+
+    // Stop when music ends
     audioElement.addEventListener('ended', () => {
       console.log("Music ended - stopping game");
       gameActive = false;
@@ -258,48 +178,47 @@ playBtn.addEventListener("click", async () => {
         const rms = features.rms;
         const now = audioContext.currentTime;
 
-        // --- store RMS ---
+        // Store RMS
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // Update player stats
-        playerStats.accuracy = playerStats.hits / (playerStats.hits + playerStats.misses || 1);
-        
-        // Get AI decision from REAL neural network
+        // Use REAL Magenta AI for note generation
         const recentRms = rmsHistory.slice(-10).reduce((a, b) => a + b, 0) / 10;
-        const aiDecision = adaptiveAI.update(playerStats, recentRms);
+        const shouldSpawn = shouldSpawnNote(recentRms, lastNoteTime, now, 0.5);
 
-        // FIXED: Force spawn notes if no notes for too long
-        forceSpawnTimer += 0.1;
         let noteSpawned = false;
-        
-        // Spawn note if: AI predicts OR music is loud OR no notes for 2 seconds
-        const shouldSpawn = (aiDecision.shouldSpawn && (now - lastNoteTime > 0.2)) || 
-                           (recentRms > 0.3 && (now - lastNoteTime > 0.3)) ||
-                           (forceSpawnTimer > 2.0);
-
         if (shouldSpawn && (now - lastNoteTime > 0.2)) {
           lastNoteTime = now;
-          forceSpawnTimer = 0; // Reset timer
-          const laneIndex = Math.floor(Math.random() * lanes.length);
+          
+          // Choose lane based on Magenta or random fallback
+          let laneIndex;
+          if (isModelLoaded && noteSequence.length > 0) {
+            // Use Magenta's suggested lane
+            const nextNote = noteSequence.shift();
+            laneIndex = nextNote.lane;
+          } else {
+            // Fallback: random lane
+            laneIndex = Math.floor(Math.random() * lanes.length);
+          }
+          
           notes.push({ 
             lane: laneIndex, 
             y: 0, 
             hit: false,
-            speed: adaptiveAI.getCurrentSpeed() // Use current AI speed
+            aiGenerated: isModelLoaded // Track if Magenta generated this
           });
           noteSpawned = true;
         }
 
-        // --- AI visualization ---
+        // AI visualization
         aiHistory.push({
-          speed: aiDecision.speed / 7, // Normalize for display
-          difficulty: aiDecision.difficulty,
+          magentaActive: isModelLoaded ? 1 : 0,
+          notesRemaining: noteSequence.length,
           spawned: noteSpawned ? 1 : 0,
           music: recentRms
         });
         if (aiHistory.length > aiCanvas.width) aiHistory.shift();
-        drawAIVisualization(aiDecision);
+        drawAIVisualization();
       },
     });
 
@@ -320,39 +239,17 @@ window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
   keys[key] = true; 
   
-  // Handle hits and update player stats for neural network
   const laneIndex = lanes.indexOf(key);
   if (laneIndex !== -1) {
     let hit = false;
     notes.forEach(note => {
       if (note.lane === laneIndex && Math.abs(note.y - hitY) < hitWindow && !note.hit) {
-        score += 100;
+        score += note.aiGenerated ? 150 : 100; // Bonus for AI-generated notes
         scoreEl.textContent = "Score: " + score;
         note.hit = true;
         hit = true;
       }
     });
-    
-    // Update player stats for neural network training
-    if (hit) {
-      playerStats.hits++;
-      playerStats.currentStreak++;
-      playerStats.lastTenHits.push(true);
-    } else {
-      // Only count as miss if there are active notes
-      const hasActiveNotes = notes.some(n => !n.hit && n.y < canvas.height);
-      if (hasActiveNotes) {
-        playerStats.misses++;
-        playerStats.currentStreak = 0;
-        playerStats.lastTenHits.push(false);
-      }
-    }
-    
-    // Keep last 10 hits for recent accuracy
-    if (playerStats.lastTenHits.length > 10) {
-      playerStats.lastTenHits.shift();
-    }
-    playerStats.missesLast10 = playerStats.lastTenHits.filter(hit => !hit).length;
   }
 });
 
@@ -362,91 +259,75 @@ window.addEventListener("keyup", (e) => {
 
 // --- Main game loop ---
 function gameLoop() {
-  if (!gameActive) return; // FIXED: Stop game loop when music ends
+  if (!gameActive) return;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // draw lanes
+  // Draw lanes
   lanes.forEach((key, i) => {
     ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  // draw hit line with AI difficulty color
-  const currentSpeed = adaptiveAI.getCurrentSpeed(); // FIXED: Get real-time AI speed
-  const difficultyColor = currentSpeed > 6 ? "#ff4444" : currentSpeed > 5 ? "#ffff44" : "#44ff44";
-  ctx.fillStyle = difficultyColor;
+  // Draw hit line
+  ctx.fillStyle = isModelLoaded ? "#8f4" : "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // FIXED: Update ALL notes with current AI speed in real-time
+  // Draw notes (Magenta-generated notes are blue)
   notes.forEach((n) => {
-    // Update existing notes to current AI speed
-    n.speed = currentSpeed;
-    n.y += n.speed;
-    ctx.fillStyle = "red";
+    n.y += 5;
+    ctx.fillStyle = n.aiGenerated ? "#48f" : "red"; // Blue for AI notes
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
     const keyPressed = keys[lanes[n.lane]];
     if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
-      score += 100;
+      score += n.aiGenerated ? 150 : 100;
       scoreEl.textContent = "Score: " + score;
       n.hit = true;
-    }
-
-    // Track missed notes for neural network (only count if note was hittable)
-    if (n.y > hitY + hitWindow && !n.hit) {
-      n.hit = true;
-      playerStats.misses++;
-      playerStats.currentStreak = 0;
-      playerStats.lastTenHits.push(false);
-      if (playerStats.lastTenHits.length > 10) {
-        playerStats.lastTenHits.shift();
-      }
     }
   });
 
   notes = notes.filter(n => !n.hit && n.y < canvas.height);
 
-  // Display neural network info
+  // Display Magenta info
   ctx.fillStyle = "white";
   ctx.font = "14px Arial";
-  ctx.fillText(`AI Samples: ${adaptiveAI.trainingSamples}`, 10, 30);
-  ctx.fillText(`Speed: ${currentSpeed.toFixed(1)}`, 10, 50);
-  ctx.fillText(`Notes: ${notes.length}`, 10, 70);
-  ctx.fillText(`Accuracy: ${Math.round(playerStats.accuracy * 100)}%`, 10, 90);
+  ctx.fillText(`Magenta: ${isModelLoaded ? "ACTIVE" : "OFF"}`, 10, 30);
+  ctx.fillText(`AI Notes: ${noteSequence.length}`, 10, 50);
+  ctx.fillText(`Score: ${score}`, 10, 70);
 
   requestAnimationFrame(gameLoop);
 }
 
 // --- Enhanced AI Visualization ---
-function drawAIVisualization(aiDecision) {
+function drawAIVisualization() {
   aiCtx.clearRect(0, 0, aiCanvas.width, aiCanvas.height);
   
   aiHistory.forEach((data, i) => {
-    // Draw speed level (from neural network)
-    const speedHeight = data.speed * aiCanvas.height;
-    aiCtx.fillStyle = "#08f";
-    aiCtx.fillRect(i, aiCanvas.height - speedHeight, 1, speedHeight);
+    // Draw Magenta activity
+    const magentaHeight = data.magentaActive * aiCanvas.height * 0.3;
+    aiCtx.fillStyle = "#8f4";
+    aiCtx.fillRect(i, aiCanvas.height - magentaHeight, 1, magentaHeight);
 
     // Draw music intensity
     const musicHeight = data.music * aiCanvas.height * 0.5;
     aiCtx.fillStyle = "#f80";
     aiCtx.fillRect(i, aiCanvas.height - musicHeight, 1, musicHeight);
 
-    // mark when note spawned
+    // Mark when note spawned
     if (data.spawned) {
-      aiCtx.fillStyle = "#0f8";
+      aiCtx.fillStyle = data.magentaActive ? "#48f" : "#f00";
       aiCtx.fillRect(i, 0, 1, aiCanvas.height);
     }
   });
 
   // Draw legends
-  aiCtx.fillStyle = "#08f";
-  aiCtx.fillText("Speed", 10, 15);
+  aiCtx.fillStyle = "#8f4";
+  aiCtx.fillText("Magenta", 10, 15);
   aiCtx.fillStyle = "#f80";
   aiCtx.fillText("Music", 10, 30);
-  aiCtx.fillStyle = "#0f8";
-  aiCtx.fillText("Note Spawn", 10, 45);
+  aiCtx.fillStyle = "#48f";
+  aiCtx.fillText("AI Note", 10, 45);
 }
 
 // --- Reset ---
@@ -458,13 +339,7 @@ function resetGame() {
   score = 0;
   rmsHistory = [];
   aiHistory = [];
-  playerStats = {
-    hits: 0,
-    misses: 0,
-    missesLast10: 0,
-    currentStreak: 0,
-    lastTenHits: []
-  };
+  noteSequence = [];
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
   playBtn.textContent = "▶️ Play Song";
