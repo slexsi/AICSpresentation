@@ -2,23 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Draw & AI Guess</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.1.0/dist/tf.min.js"></script>
-  <style>
-    body { font-family: sans-serif; text-align: center; background: #f0f0f0; }
-    canvas { border: 2px solid #333; cursor: crosshair; margin-top: 20px; background: white; }
-    #controls { margin-top: 10px; }
-    #prediction { font-size: 24px; margin-top: 15px; }
-  </style>
+  <title>Interactive AI Drawing Recognition</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0"></script>
 </head>
 <body>
-  <h1>Draw Something and See What AI Guesses!</h1>
-  <canvas id="canvas" width="300" height="300"></canvas>
-  <div id="controls">
-    <button id="clearBtn">Clear</button>
-    <button id="predictBtn">Predict</button>
-  </div>
-  <h2 id="prediction">Prediction: </h2>
+  <h1>Draw something and let AI recognize it!</h1>
+  
+  <video id="webcam" autoplay playsinline width="400" height="300"></video>
+  <div id="prediction">Prediction: -</div>
+
   <script src="script.js"></script>
 </body>
 </html>
