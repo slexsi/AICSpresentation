@@ -27,18 +27,11 @@ const historyLength = 1024 * 30;
 let currentSpeed = 5;          // initial note speed
 const smoothingFactor = 0.05;  // smoothing for gradual change
 
-// Player stats
-let playerStats = {
-  hits: 0,
-  misses: 0,
-  combo: 0
-};
-
-// Simple neural network: higher RMS -> higher beat probability
+// Simple NN: higher RMS -> higher beat probability
 let nnModel = {
   predict: (input) => {
     const avg = input.reduce((a, b) => a + b, 0) / input.length;
-    return Math.min(avg * 20, 1); // output 0-1
+    return Math.min(avg * 20, 1);
   }
 };
 
@@ -77,13 +70,12 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- Neural network beat probability ---
+        // --- Neural network predicts beat probability ---
         const inputWindow = rmsHistory.slice(-20);
         const beatProb = nnModel.predict(inputWindow);
 
-        // --- Adjust speed based on beat and player performance ---
-        const performanceFactor = Math.min(1, playerStats.hits / Math.max(1, playerStats.hits + playerStats.misses));
-        const targetSpeed = 3 + beatProb * 7 + performanceFactor * 2; // 3-12 range
+        // --- Adjust note speed based only on song beat ---
+        const targetSpeed = 3 + beatProb * 7; // speed 3-10
         currentSpeed = currentSpeed + (targetSpeed - currentSpeed) * smoothingFactor;
 
         // Spawn note
@@ -125,8 +117,8 @@ function gameLoop() {
   ctx.fillRect(0, hitY, canvas.width, 5);
 
   // --- Draw AI speed bar above hit line ---
-  const barWidth = (currentSpeed / 12) * canvas.width; // normalize to max speed
-  const red = Math.floor((currentSpeed / 12) * 255);
+  const barWidth = (currentSpeed / 10) * canvas.width; // normalize to max speed
+  const red = Math.floor((currentSpeed / 10) * 255);
   const blue = 255 - red;
   ctx.fillStyle = `rgb(${red},0,${blue})`;
   ctx.fillRect(0, hitY - 10, barWidth, 5);
@@ -142,17 +134,6 @@ function gameLoop() {
       score += 100;
       scoreEl.textContent = "Score: " + score;
       n.hit = true;
-      playerStats.hits++;
-      playerStats.combo++;
-    }
-  });
-
-  // Count misses
-  notes.forEach((n) => {
-    if (!n.hit && n.y > hitY + hitWindow) {
-      n.hit = true;
-      playerStats.misses++;
-      playerStats.combo = 0;
     }
   });
 
@@ -169,7 +150,6 @@ function resetGame() {
   notes = [];
   score = 0;
   rmsHistory = [];
-  playerStats = { hits: 0, misses: 0, combo: 0 };
   currentSpeed = 5;
   scoreEl.textContent = "Score: 0";
   playBtn.disabled = false;
