@@ -34,7 +34,7 @@ model.add(tf.layers.dense({ inputShape: [4], units: 8, activation: 'relu' }));
 model.add(tf.layers.dense({ units: 3, activation: 'linear' })); // outputs: [noteSpeed, spawnRate, complexity]
 model.compile({ optimizer: 'adam', loss: 'meanSquaredError' });
 
-// --- Training data (simple initial rules) ---
+// --- Initial training data ---
 const trainInputs = tf.tensor2d([
   [0.9, 1, 0.2, 10],   // excellent
   [0.5, 5, 0.5, 2],    // average
@@ -48,12 +48,8 @@ const trainOutputs = tf.tensor2d([
 model.fit(trainInputs, trainOutputs, { epochs: 50 });
 
 // --- Track player performance ---
-let playerStats = {
-  hits: 0,
-  misses: 0,
-  totalReaction: 0,
-  combo: 0
-};
+let playerStats = { hits:0, misses:0, totalReaction:0, combo:0 };
+const onlineLearningRate = 0.01;
 
 // --- File upload ---
 songUpload.addEventListener("change", (e) => {
@@ -90,26 +86,27 @@ playBtn.addEventListener("click", async () => {
         rmsHistory.push(rms);
         if (rmsHistory.length > historyLength) rmsHistory.shift();
 
-        // --- Use RMS history for beat probability ---
+        // --- Beat probability ---
         const inputWindow = rmsHistory.slice(-20);
         const beatProb = inputWindow.reduce((a,b)=>a+b,0)/inputWindow.length * 20;
 
-        // --- spawn note if probability high ---
+        // --- Spawn note if probability high ---
         if (beatProb > 0.5 && now - lastNoteTime > 0.2) {
           lastNoteTime = now;
 
-          // --- Predict adaptive difficulty ---
           const perfVector = [
             playerStats.hits / Math.max(1, playerStats.hits + playerStats.misses),
             playerStats.misses,
             playerStats.totalReaction / Math.max(1, playerStats.hits),
             playerStats.combo
           ];
+
+          // Predict difficulty
           const pred = model.predict(tf.tensor2d([perfVector])).dataSync();
           const noteSpeed = Math.max(2, pred[0]);
           const complexity = Math.min(1, pred[2]);
 
-          // spawn note
+          // Decide lane(s) based on complexity
           const lanesToUse = complexity >= 0.5 ? lanes.length : 1;
           const laneIndex = Math.floor(Math.random() * lanesToUse);
           notes.push({ lane: laneIndex, y: 0, hit: false, speed: noteSpeed });
@@ -137,45 +134,80 @@ const keys = {};
 window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
 window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
+// --- Online learning function ---
+function trainOnline() {
+    const perfVector = [
+        playerStats.hits / Math.max(1, playerStats.hits + playerStats.misses),
+        playerStats.misses,
+        playerStats.totalReaction / Math.max(1, playerStats.hits),
+        playerStats.combo
+    ];
+
+    // Current prediction
+    let target = model.predict(tf.tensor2d([perfVector])).dataSync();
+
+    // Adjust target slightly based on performance
+    if (playerStats.hits > playerStats.misses) {
+        target[0] += 0.05; // increase speed
+        target[2] += 0.02; // increase complexity
+    } else {
+        target[0] -= 0.05; // decrease speed
+        target[2] -= 0.02; // decrease complexity
+    }
+
+    // Clamp values
+    target[0] = Math.max(2, Math.min(10, target[0]));
+    target[1] = Math.max(0.5, Math.min(3, target[1]));
+    target[2] = Math.max(0.1, Math.min(1, target[2]));
+
+    const xs = tf.tensor2d([perfVector]);
+    const ys = tf.tensor2d([target]);
+    model.fit(xs, ys, { epochs: 1, batchSize: 1 }).then(() => xs.dispose(), ys.dispose());
+}
+
 // --- Main game loop ---
 function gameLoop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // draw lanes
+  // Draw lanes
   lanes.forEach((key, i) => {
     ctx.fillStyle = keys[key] ? "#0f0" : "#333";
     ctx.fillRect(i * laneWidth, 0, laneWidth - 2, canvas.height);
   });
 
-  // draw hit line
+  // Draw hit line
   ctx.fillStyle = "yellow";
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // draw notes
+  // Draw notes
   notes.forEach((n) => {
-    n.y += n.speed || 5; // adaptive speed
+    n.y += n.speed || 5;
     ctx.fillStyle = "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
     const keyPressed = keys[lanes[n.lane]];
     if (Math.abs(n.y - hitY) < hitWindow && keyPressed && !n.hit) {
-      score += 100;
-      scoreEl.textContent = "Score: " + score;
-      n.hit = true;
+        score += 100;
+        scoreEl.textContent = "Score: " + score;
+        n.hit = true;
 
-      // update player stats
-      playerStats.hits++;
-      playerStats.combo++;
-      playerStats.totalReaction += Math.abs(n.y - hitY)/60; // rough timing
+        // Update stats
+        playerStats.hits++;
+        playerStats.combo++;
+        playerStats.totalReaction += Math.abs(n.y - hitY)/60;
+
+        trainOnline(); // online learning
     }
   });
 
-  // missed notes
+  // Missed notes
   notes.forEach(n => {
     if (!n.hit && n.y > hitY + hitWindow) {
-      playerStats.misses++;
-      playerStats.combo = 0;
-      n.hit = true; // mark as processed
+        playerStats.misses++;
+        playerStats.combo = 0;
+        n.hit = true;
+
+        trainOnline(); // online learning
     }
   });
 
