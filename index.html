@@ -1,67 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Rhythm Demo</title>
+  <meta charset="UTF-8">
+  <title>AI Rhythm Game</title>
   <style>
-    body {
-      text-align: center;
-      background: #111;
-      color: white;
-      font-family: sans-serif;
-    }
-    canvas {
-      background: #222;
-      border-radius: 12px;
-      margin-top: 20px;
-      display: block;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    button {
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 18px;
-      border: none;
-      border-radius: 8px;
-      background: #0f8;
-      cursor: pointer;
-    }
-    button:disabled {
-      opacity: 0.6;
-    }
-    #score {
-      margin-top: 10px;
-      font-size: 20px;
-    }
+    body { text-align: center; font-family: sans-serif; background: #111; color: white; }
+    canvas { background: #222; display: block; margin: 20px auto; border: 2px solid #555; }
+    #score { font-size: 24px; margin: 10px; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
 </head>
 <body>
-  <h1>AI Rhythm Demo 🎵</h1>
-
-  <!-- AI visualization canvas -->
-  <canvas id="rmsCanvas" width="600" height="100"></canvas>
-
-  <!-- Main game canvas -->
-  <canvas id="gameCanvas" width="600" height="400"></canvas>
-
-  <!-- Score display -->
+  <h1>AI Rhythm Game</h1>
   <div id="score">Score: 0</div>
+  <canvas id="gameCanvas" width="600" height="400"></canvas>
+  <button onclick="startGame()">Start</button>
 
-  <!-- Audio upload -->
-  <input type="file" id="songUpload" accept="audio/*">
-
-  <!-- Meyda library -->
-  <script src="https://unpkg.com/meyda/dist/web/meyda.min.js"></script>
-
-  <!-- Magenta.js for MusicRNN -->
-  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1"></script>
-
-  <!-- TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.8.0/dist/tf.min.js"></script>
-
-  <!-- Game logic -->
   <script src="script.js"></script>
 </body>
 </html>
