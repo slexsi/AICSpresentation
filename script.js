@@ -8,6 +8,7 @@ const hitY = canvas.height - 60;
 const hitWindow = 40;
 let notes = [];
 let score = 0;
+let gameActive = false;
 
 // AI visualization canvas
 const aiCanvas = document.createElement("canvas");
@@ -72,6 +73,7 @@ class RealNeuralNetwork {
     this.learningRate = 0.01;
     this.trainingData = [];
     this.trainingSamples = 0;
+    this.currentSpeed = 5; // Default speed
   }
 
   // Forward propagation (like real NN inference)
@@ -104,8 +106,11 @@ class RealNeuralNetwork {
       output[i] = this.sigmoid(output[i]); // Output activation
     }
 
+    // Update current speed based on neural network output
+    this.currentSpeed = 3 + (output[0] * 4); // Convert to speed range 3-7
+
     return {
-      speed: 3 + (output[0] * 4), // Convert to speed range 3-7
+      speed: this.currentSpeed,
       shouldSpawn: output[1] > 0.5,
       rawOutput: output
     };
@@ -178,10 +183,15 @@ class RealNeuralNetwork {
     }
 
     return {
-      speed: prediction.speed,
+      speed: this.currentSpeed, // Use the updated current speed
       difficulty: prediction.rawOutput[0],
       shouldSpawn: prediction.shouldSpawn
     };
+  }
+
+  // Get current speed for all notes
+  getCurrentSpeed() {
+    return this.currentSpeed;
   }
 }
 
@@ -214,8 +224,11 @@ document.getElementById('trainBtn').addEventListener('click', () => {
 
 // --- Play button ---
 playBtn.addEventListener("click", async () => {
+  if (gameActive) return; // Prevent multiple plays
+  
   resetGame();
   playBtn.textContent = "Loading...";
+  gameActive = true;
 
   try {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -227,13 +240,21 @@ playBtn.addEventListener("click", async () => {
     let lastNoteTime = 0;
     let forceSpawnTimer = 0;
 
+    // FIXED: Stop when music ends
+    audioElement.addEventListener('ended', () => {
+      console.log("Music ended - stopping game");
+      gameActive = false;
+      playBtn.textContent = "▶️ Play Song";
+      if (analyzer) analyzer.stop();
+    });
+
     analyzer = Meyda.createMeydaAnalyzer({
       audioContext,
       source: sourceNode,
       bufferSize: 1024,
       featureExtractors: ["rms"],
       callback: (features) => {
-        if (!features) return;
+        if (!features || !gameActive) return;
         const rms = features.rms;
         const now = audioContext.currentTime;
 
@@ -265,7 +286,7 @@ playBtn.addEventListener("click", async () => {
             lane: laneIndex, 
             y: 0, 
             hit: false,
-            speed: aiDecision.speed // REAL neural network controls speed!
+            speed: adaptiveAI.getCurrentSpeed() // Use current AI speed
           });
           noteSpawned = true;
         }
@@ -289,6 +310,7 @@ playBtn.addEventListener("click", async () => {
   } catch (err) {
     console.error(err);
     playBtn.textContent = "▶️ Try Again";
+    gameActive = false;
   }
 });
 
@@ -340,6 +362,8 @@ window.addEventListener("keyup", (e) => {
 
 // --- Main game loop ---
 function gameLoop() {
+  if (!gameActive) return; // FIXED: Stop game loop when music ends
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // draw lanes
@@ -349,14 +373,16 @@ function gameLoop() {
   });
 
   // draw hit line with AI difficulty color
-  const currentSpeed = notes[0]?.speed || 5;
+  const currentSpeed = adaptiveAI.getCurrentSpeed(); // FIXED: Get real-time AI speed
   const difficultyColor = currentSpeed > 6 ? "#ff4444" : currentSpeed > 5 ? "#ffff44" : "#44ff44";
   ctx.fillStyle = difficultyColor;
   ctx.fillRect(0, hitY, canvas.width, 5);
 
-  // draw notes with REAL neural network speed
+  // FIXED: Update ALL notes with current AI speed in real-time
   notes.forEach((n) => {
-    n.y += n.speed || 5; // Use neural network speed or default
+    // Update existing notes to current AI speed
+    n.speed = currentSpeed;
+    n.y += n.speed;
     ctx.fillStyle = "red";
     ctx.fillRect(n.lane * laneWidth + 5, n.y, laneWidth - 10, 30);
 
@@ -387,6 +413,7 @@ function gameLoop() {
   ctx.fillText(`AI Samples: ${adaptiveAI.trainingSamples}`, 10, 30);
   ctx.fillText(`Speed: ${currentSpeed.toFixed(1)}`, 10, 50);
   ctx.fillText(`Notes: ${notes.length}`, 10, 70);
+  ctx.fillText(`Accuracy: ${Math.round(playerStats.accuracy * 100)}%`, 10, 90);
 
   requestAnimationFrame(gameLoop);
 }
@@ -443,4 +470,5 @@ function resetGame() {
   playBtn.textContent = "▶️ Play Song";
   audioElement.pause();
   audioElement.currentTime = 0;
+  gameActive = false;
 }
