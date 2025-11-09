@@ -19,11 +19,44 @@ document.body.insertBefore(aiCanvas, canvas);
 const aiCtx = aiCanvas.getContext("2d");
 let aiHistory = [];
 
-// Buttons
-const playBtn = document.createElement("button");
-playBtn.textContent = "▶️ Play Song";
-document.body.insertBefore(playBtn, canvas.nextSibling);
-const songUpload = document.getElementById("songUpload");
+// --- Better Reset Function ---
+function resetGame() {
+  // Stop and clean up audio analysis
+  if (analyzer) {
+    try {
+      analyzer.stop();
+    } catch (e) {
+      console.log('Analyzer already stopped');
+    }
+  }
+  
+  // Clear game state
+  notes = [];
+  score = 0;
+  rmsHistory = [];
+  aiHistory = [];
+  
+  // Reset player stats but keep training data
+  playerStats = {
+    hits: 0,
+    misses: 0,
+    accuracy: 0.5,
+    currentStreak: 0,
+    totalNotes: 0
+  };
+  
+  scoreEl.textContent = "Score: 0";
+  playBtn.disabled = false;
+  playBtn.textContent = "▶️ Play Song";
+  
+  // Reset audio
+  if (audioElement) {
+    audioElement.pause();
+    audioElement.currentTime = 0;
+  }
+  
+  console.log("Game reset complete");
+}
 
 // Add ML Controls
 const mlControls = document.createElement("div");
